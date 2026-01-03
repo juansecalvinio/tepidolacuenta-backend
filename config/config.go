@@ -12,6 +12,7 @@ type Config struct {
 	Port                string
 	GinMode             string
 	CORSAllowedOrigins  string
+	FrontendBaseURL     string
 }
 
 func Load() (*Config, error) {
@@ -24,6 +25,7 @@ func Load() (*Config, error) {
 		Port:               getEnv("PORT", "8080"),
 		GinMode:            getEnv("GIN_MODE", "debug"),
 		CORSAllowedOrigins: getEnv("CORS_ALLOWED_ORIGINS", "http://localhost:5173"),
+		FrontendBaseURL:    getEnv("FRONTEND_BASE_URL", "http://localhost:5173"),
 	}, nil
 }
 

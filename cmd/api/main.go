@@ -18,8 +18,18 @@ import (
 	restaurantRepo "juansecalvinio/tepidolacuenta/internal/restaurant/repository"
 	restaurantUseCase "juansecalvinio/tepidolacuenta/internal/restaurant/usecase"
 
+	tableHandler "juansecalvinio/tepidolacuenta/internal/table/handler"
+	tableRepo "juansecalvinio/tepidolacuenta/internal/table/repository"
+	tableUseCase "juansecalvinio/tepidolacuenta/internal/table/usecase"
+
+	requestDomain "juansecalvinio/tepidolacuenta/internal/request/domain"
+	requestHandler "juansecalvinio/tepidolacuenta/internal/request/handler"
+	requestRepo "juansecalvinio/tepidolacuenta/internal/request/repository"
+	requestUseCase "juansecalvinio/tepidolacuenta/internal/request/usecase"
+
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func main() {
@@ -37,8 +47,14 @@ func main() {
 	defer db.Close()
 	log.Println("✓ Connected to MongoDB")
 
-	// Initialize JWT service
+	// Initialize services
 	jwtService := pkg.NewJWTService(cfg.JWTSecret)
+	qrService := pkg.NewQRService(cfg.FrontendBaseURL)
+
+	// Initialize WebSocket hub
+	hub := pkg.NewHub()
+	go hub.Run()
+	log.Println("✓ WebSocket hub started")
 
 	// Initialize Auth module
 	authRepository := authRepo.NewMongoRepository(db.Database)
@@ -49,6 +65,28 @@ func main() {
 	restaurantRepository := restaurantRepo.NewMongoRepository(db.Database)
 	restaurantService := restaurantUseCase.NewRestaurantUseCase(restaurantRepository)
 	restaurantHdlr := restaurantHandler.NewRestaurantHandler(restaurantService)
+
+	// Initialize Table module
+	tableRepository := tableRepo.NewMongoRepository(db.Database)
+	tableService := tableUseCase.NewTableUseCase(tableRepository, restaurantRepository, qrService)
+	tableHdlr := tableHandler.NewTableHandler(tableService)
+
+	// Initialize Request module
+	requestRepository := requestRepo.NewMongoRepository(db.Database)
+
+	// Notification function for WebSocket
+	notifyFunc := func(restaurantID primitive.ObjectID, request *requestDomain.Request) {
+		hub.Broadcast(restaurantID, request)
+	}
+
+	requestService := requestUseCase.NewRequestUseCase(
+		requestRepository,
+		restaurantRepository,
+		tableRepository,
+		qrService,
+		notifyFunc,
+	)
+	requestHdlr := requestHandler.NewRequestHandler(requestService, hub)
 
 	// Set Gin mode
 	gin.SetMode(cfg.GinMode)
@@ -76,6 +114,10 @@ func main() {
 
 	// API v1 routes
 	v1 := router.Group("/api/v1")
+
+	// Public routes group (no authentication required)
+	publicV1 := v1.Group("/public")
+
 	{
 		// Auth routes (public)
 		authHdlr.RegisterRoutes(v1)
@@ -87,25 +129,12 @@ func main() {
 			// Restaurant routes
 			restaurantHdlr.RegisterRoutes(protected)
 
-			// Table routes - TODO: implement table module (using /tables path to avoid conflicts)
-			protected.POST("/tables", func(c *gin.Context) {
-				c.JSON(http.StatusOK, gin.H{"message": "Create table endpoint - to be implemented"})
-			})
-			protected.GET("/tables/restaurant/:restaurantId", func(c *gin.Context) {
-				c.JSON(http.StatusOK, gin.H{"message": "Get tables by restaurant endpoint - to be implemented"})
-			})
+			// Table routes
+			tableHdlr.RegisterRoutes(protected)
 		}
 
-		// Public routes (no authentication required)
-		// Request routes - TODO: implement request module
-		v1.POST("/request-account", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{"message": "Request account endpoint - to be implemented"})
-		})
-
-		// WebSocket - TODO: implement websocket handler
-		v1.GET("/ws/:restaurantId", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{"message": "WebSocket endpoint - to be implemented"})
-		})
+		// Request routes (both public and protected)
+		requestHdlr.RegisterRoutes(protected, publicV1)
 	}
 
 	log.Printf("🚀 Server running on port %s\n", cfg.Port)
