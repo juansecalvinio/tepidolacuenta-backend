@@ -96,13 +96,15 @@ func main() {
 
 	// CORS configuration
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{cfg.CORSAllowedOrigins},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Content-Type", "Authorization"},
-		ExposeHeaders:    []string{"Content-Length"},
+		AllowOrigins:     cfg.CORSAllowedOrigins,
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept", "X-Requested-With"},
+		ExposeHeaders:    []string{"Content-Length", "Content-Type"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+
+	log.Printf("✓ CORS enabled for origins: %v", cfg.CORSAllowedOrigins)
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {

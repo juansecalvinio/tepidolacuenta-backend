@@ -83,9 +83,9 @@ func (r *mongoRepository) Update(ctx context.Context, user *domain.User) error {
 
 	update := bson.M{
 		"$set": bson.M{
-			"email":           user.Email,
-			"restaurant_name": user.RestaurantName,
-			"updated_at":      user.UpdatedAt,
+			"email":      user.Email,
+			"username":   user.Username,
+			"updated_at": user.UpdatedAt,
 		},
 	}
 

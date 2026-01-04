@@ -20,16 +20,16 @@ type Restaurant struct {
 // CreateRestaurantInput represents the data needed to create a restaurant
 type CreateRestaurantInput struct {
 	Name        string `json:"name" binding:"required,min=3,max=100"`
-	Address     string `json:"address" binding:"required,min=5,max=200"`
-	Phone       string `json:"phone" binding:"required,min=8,max=20"`
+	Address     string `json:"address,omitempty" binding:"max=200"`
+	Phone       string `json:"phone,omitempty" binding:"max=20"`
 	Description string `json:"description,omitempty" binding:"max=500"`
 }
 
 // UpdateRestaurantInput represents the data needed to update a restaurant
 type UpdateRestaurantInput struct {
 	Name        string `json:"name,omitempty" binding:"omitempty,min=3,max=100"`
-	Address     string `json:"address,omitempty" binding:"omitempty,min=5,max=200"`
-	Phone       string `json:"phone,omitempty" binding:"omitempty,min=8,max=20"`
+	Address     string `json:"address,omitempty" binding:"omitempty,max=200"`
+	Phone       string `json:"phone,omitempty" binding:"omitempty,max=20"`
 	Description string `json:"description,omitempty" binding:"max=500"`
 }
 

@@ -34,7 +34,7 @@ func NewRestaurantUseCase(repo repository.Repository) UseCase {
 // Create creates a new restaurant
 func (uc *restaurantUseCase) Create(ctx context.Context, userID primitive.ObjectID, input domain.CreateRestaurantInput) (*domain.Restaurant, error) {
 	// Validate input
-	if !pkg.IsValidRestaurantName(input.Name) {
+	if !pkg.IsValidUsername(input.Name) {
 		return nil, errors.New("restaurant name must be between 3 and 100 characters")
 	}
 
@@ -84,7 +84,7 @@ func (uc *restaurantUseCase) Update(ctx context.Context, id primitive.ObjectID, 
 
 	// Update fields if provided
 	if input.Name != "" {
-		if !pkg.IsValidRestaurantName(input.Name) {
+		if !pkg.IsValidUsername(input.Name) {
 			return nil, errors.New("restaurant name must be between 3 and 100 characters")
 		}
 		restaurant.Name = input.Name

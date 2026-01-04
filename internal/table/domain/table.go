@@ -31,6 +31,12 @@ type UpdateTableInput struct {
 	IsActive *bool `json:"isActive,omitempty"`
 }
 
+// BulkCreateTablesInput represents the data needed to create multiple tables
+type BulkCreateTablesInput struct {
+	RestaurantID string `json:"restaurantId" binding:"required"`
+	Count        int    `json:"count" binding:"required,min=1,max=100"`
+}
+
 // NewTable creates a new table with the current timestamp
 func NewTable(restaurantID primitive.ObjectID, number, capacity int, qrCode string) *Table {
 	now := time.Now()

@@ -39,12 +39,12 @@ func (uc *authUseCase) Register(ctx context.Context, input domain.RegisterInput)
 		return nil, errors.New("password must be at least 8 characters")
 	}
 
-	if !pkg.IsValidRestaurantName(input.RestaurantName) {
-		return nil, errors.New("restaurant name must be between 3 and 100 characters")
+	if !pkg.IsValidUsername(input.Username) {
+		return nil, errors.New("username must be between 3 and 100 characters")
 	}
 
 	// Create new user
-	user := domain.NewUser(input.Email, input.Password, input.RestaurantName)
+	user := domain.NewUser(input.Email, input.Password, input.Username)
 
 	// Hash password
 	if err := user.HashPassword(); err != nil {
@@ -76,7 +76,7 @@ func (uc *authUseCase) Login(ctx context.Context, input domain.LoginInput) (*dom
 	}
 
 	// Generate JWT token
-	token, err := uc.jwtService.GenerateToken(user.ID, user.Email, user.RestaurantName)
+	token, err := uc.jwtService.GenerateToken(user.ID, user.Email, user.Username)
 	if err != nil {
 		return nil, err
 	}

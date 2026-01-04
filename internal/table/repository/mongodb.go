@@ -63,7 +63,8 @@ func (r *mongoRepository) FindByRestaurantID(ctx context.Context, restaurantID p
 	}
 	defer cursor.Close(ctx)
 
-	var tables []*domain.Table
+	// Initialize with empty slice instead of nil
+	tables := make([]*domain.Table, 0)
 	if err := cursor.All(ctx, &tables); err != nil {
 		return nil, err
 	}

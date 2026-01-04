@@ -13,7 +13,7 @@ const (
 	bearerPrefix        = "Bearer "
 	userIDKey           = "userId"
 	userEmailKey        = "userEmail"
-	restaurantNameKey   = "restaurantName"
+	usernameKey         = "username"
 )
 
 // AuthMiddleware creates a middleware for JWT authentication
@@ -53,7 +53,7 @@ func AuthMiddleware(jwtService *pkg.JWTService) gin.HandlerFunc {
 		// Set user information in context
 		c.Set(userIDKey, claims.UserID)
 		c.Set(userEmailKey, claims.Email)
-		c.Set(restaurantNameKey, claims.RestaurantName)
+		c.Set(usernameKey, claims.Username)
 
 		c.Next()
 	}
@@ -77,9 +77,9 @@ func GetUserEmail(c *gin.Context) (string, bool) {
 	return email.(string), true
 }
 
-// GetRestaurantName gets the restaurant name from the context
-func GetRestaurantName(c *gin.Context) (string, bool) {
-	name, exists := c.Get(restaurantNameKey)
+// GetUsername gets the username from the context
+func GetUsername(c *gin.Context) (string, bool) {
+	name, exists := c.Get(usernameKey)
 	if !exists {
 		return "", false
 	}

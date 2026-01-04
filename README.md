@@ -194,7 +194,7 @@ Registra un nuevo usuario/restaurante en el sistema.
 {
   "email": "restaurant@example.com",
   "password": "securePassword123",
-  "restaurantName": "La Pizzeria"
+  "username": "La Pizzeria"
 }
 ```
 
@@ -206,7 +206,7 @@ Registra un nuevo usuario/restaurante en el sistema.
   "data": {
     "id": "64a7f8b3c12345678901234",
     "email": "restaurant@example.com",
-    "restaurantName": "La Pizzeria",
+    "username": "La Pizzeria",
     "createdAt": "2026-01-02T12:00:00Z",
     "updatedAt": "2026-01-02T12:00:00Z"
   }
@@ -242,7 +242,7 @@ Autenticar usuario y obtener token JWT.
     "user": {
       "id": "64a7f8b3c12345678901234",
       "email": "restaurant@example.com",
-      "restaurantName": "La Pizzeria",
+      "username": "La Pizzeria",
       "createdAt": "2026-01-02T12:00:00Z",
       "updatedAt": "2026-01-02T12:00:00Z"
     }
@@ -478,6 +478,73 @@ Content-Type: application/json
 **Errors:**
 - `400 Bad Request` - Table number already exists for this restaurant
 - `401 Unauthorized` - User doesn't own the restaurant
+
+---
+
+#### Bulk Create Tables
+
+**POST** `/api/v1/tables/bulk`
+
+Crea múltiples mesas automáticamente para un restaurante. Las mesas se crean secuencialmente comenzando desde el siguiente número disponible, y cada una recibe su QR code generado automáticamente.
+
+**Headers:**
+```
+Authorization: Bearer {token}
+Content-Type: application/json
+```
+
+**Request Body:**
+```json
+{
+  "restaurantId": "64a7f9abc12345678901234",
+  "count": 10
+}
+```
+
+**Parámetros:**
+- `restaurantId` (string, requerido): ID del restaurante
+- `count` (integer, requerido): Cantidad de mesas a crear (mínimo: 1, máximo: 100)
+
+**Response:** `201 Created`
+```json
+{
+  "success": true,
+  "message": "Tables created successfully",
+  "data": [
+    {
+      "id": "64a7fabc12345678901234",
+      "restaurantId": "64a7f9abc12345678901234",
+      "number": 1,
+      "capacity": 4,
+      "qrCode": "http://localhost:5173/request?r=64a7f9abc12345678901234&t=64a7fabc12345678901234&n=1&h=GUyQvt7LbzYbdaX9",
+      "isActive": true,
+      "createdAt": "2026-01-02T12:15:00Z",
+      "updatedAt": "2026-01-02T12:15:00Z"
+    },
+    {
+      "id": "64a7fabc12345678901235",
+      "restaurantId": "64a7f9abc12345678901234",
+      "number": 2,
+      "capacity": 4,
+      "qrCode": "http://localhost:5173/request?r=64a7f9abc12345678901234&t=64a7fabc12345678901235&n=2&h=XyZ123AbcDef4567",
+      "isActive": true,
+      "createdAt": "2026-01-02T12:15:01Z",
+      "updatedAt": "2026-01-02T12:15:01Z"
+    }
+  ]
+}
+```
+
+**Notas:**
+- La capacidad por defecto es 4 personas por mesa
+- Si ya existen mesas, la numeración continúa desde el número más alto existente + 1
+- Todas las mesas se crean como activas (`isActive: true`)
+
+**Errors:**
+- `400 Bad Request` - Datos de entrada inválidos
+- `401 Unauthorized` - User doesn't own the restaurant
+- `404 Not Found` - Restaurant not found
+- `500 Internal Server Error` - Error al crear las mesas
 
 ---
 
@@ -889,7 +956,7 @@ curl -X POST http://localhost:8080/api/v1/auth/register \
   -d '{
     "email": "restaurant@example.com",
     "password": "password123",
-    "restaurantName": "La Pizzeria"
+    "username": "La Pizzeria"
   }'
 
 # 2. Login y obtener token
@@ -1003,8 +1070,7 @@ go test ./...
 ### Build para producción
 
 ```bash
-go build -o bin/server cmd/api/main.go
-./bin/server
+go build -o bin/server cmd/api/main.go && ./bin/server
 ```
 
 ---
@@ -1042,4 +1108,4 @@ MIT License - ver archivo LICENSE para más detalles.
 
 ## Contacto
 
-Para preguntas o soporte, contactar a: [tu-email@example.com]
+Para preguntas o soporte, contactar a: [j.s.calvinio@gmail.com]

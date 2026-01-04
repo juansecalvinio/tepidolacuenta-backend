@@ -50,7 +50,8 @@ func (r *mongoRepository) FindByRestaurantID(ctx context.Context, restaurantID p
 	}
 	defer cursor.Close(ctx)
 
-	var requests []*domain.Request
+	// Initialize with empty slice instead of nil
+	requests := make([]*domain.Request, 0)
 	if err := cursor.All(ctx, &requests); err != nil {
 		return nil, err
 	}
@@ -71,7 +72,8 @@ func (r *mongoRepository) FindPendingByRestaurantID(ctx context.Context, restaur
 	}
 	defer cursor.Close(ctx)
 
-	var requests []*domain.Request
+	// Initialize with empty slice instead of nil
+	requests := make([]*domain.Request, 0)
 	if err := cursor.All(ctx, &requests); err != nil {
 		return nil, err
 	}

@@ -73,6 +73,55 @@ func (h *Handler) Create(c *gin.Context) {
 	pkg.SuccessResponse(c, http.StatusCreated, "Table created successfully", table)
 }
 
+// BulkCreate handles bulk table creation
+// @Summary Create multiple tables for a restaurant
+// @Tags tables
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param input body domain.BulkCreateTablesInput true "Bulk create data"
+// @Success 201 {object} pkg.Response{data=[]domain.Table}
+// @Failure 400 {object} pkg.Response
+// @Failure 401 {object} pkg.Response
+// @Failure 500 {object} pkg.Response
+// @Router /api/v1/tables/bulk [post]
+func (h *Handler) BulkCreate(c *gin.Context) {
+	// Get user ID from context
+	userIDStr, exists := middleware.GetUserID(c)
+	if !exists {
+		pkg.UnauthorizedResponse(c, "User not authenticated", pkg.ErrUnauthorized)
+		return
+	}
+
+	userID, err := primitive.ObjectIDFromHex(userIDStr)
+	if err != nil {
+		pkg.BadRequestResponse(c, "Invalid user ID", err)
+		return
+	}
+
+	var input domain.BulkCreateTablesInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		pkg.BadRequestResponse(c, "Invalid input", err)
+		return
+	}
+
+	tables, err := h.useCase.BulkCreate(c.Request.Context(), userID, input)
+	if err != nil {
+		if errors.Is(err, pkg.ErrUnauthorized) {
+			pkg.UnauthorizedResponse(c, "You don't have access to this restaurant", err)
+			return
+		}
+		if errors.Is(err, pkg.ErrNotFound) {
+			pkg.NotFoundResponse(c, "Restaurant not found", err)
+			return
+		}
+		pkg.InternalServerErrorResponse(c, "Failed to create tables", err)
+		return
+	}
+
+	pkg.SuccessResponse(c, http.StatusCreated, "Tables created successfully", tables)
+}
+
 // GetByID handles retrieving a table by ID
 // @Summary Get table by ID
 // @Tags tables
@@ -288,6 +337,7 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	tables := router.Group("/tables")
 	{
 		tables.POST("", h.Create)
+		tables.POST("/bulk", h.BulkCreate)
 		tables.GET("/:id", h.GetByID)
 		tables.GET("/restaurant/:restaurantId", h.ListByRestaurant)
 		tables.PUT("/:id", h.Update)

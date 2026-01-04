@@ -14,7 +14,7 @@ func IsValidPassword(password string) bool {
 	return len(password) >= 8
 }
 
-func IsValidRestaurantName(name string) bool {
+func IsValidUsername(name string) bool {
 	return len(name) >= 3 && len(name) <= 100
 }
 
