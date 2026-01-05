@@ -102,6 +102,7 @@ func (r *mongoRepository) Update(ctx context.Context, table *domain.Table) error
 		"$set": bson.M{
 			"number":     table.Number,
 			"capacity":   table.Capacity,
+			"qr_code":    table.QRCode,
 			"is_active":  table.IsActive,
 			"updated_at": table.UpdatedAt,
 		},
