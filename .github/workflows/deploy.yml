@@ -47,6 +47,7 @@ jobs:
               -e JWT_SECRET="${{ secrets.JWT_SECRET }}" \
               -e MONGODB_URI="${{ secrets.MONGODB_URI }}" \
               -e MONGODB_DATABASE="${{ secrets.MONGODB_DATABASE }}" \
+              -e FRONTEND_BASE_URL="${{ secrets.FRONTEND_BASE_URL }}" \
               --restart unless-stopped \
               ${{ secrets.DOCKER_USERNAME }}/tepidolacuenta-backend:latest
 
