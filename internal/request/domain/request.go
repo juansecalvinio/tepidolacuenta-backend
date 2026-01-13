@@ -11,7 +11,7 @@ type RequestStatus string
 
 const (
 	StatusPending   RequestStatus = "pending"
-	StatusProcessed RequestStatus = "processed"
+	StatusAttended  RequestStatus = "attended"
 	StatusCancelled RequestStatus = "cancelled"
 )
 
@@ -36,7 +36,7 @@ type CreateRequestInput struct {
 
 // UpdateRequestStatusInput represents the input for updating request status
 type UpdateRequestStatusInput struct {
-	Status RequestStatus `json:"status" binding:"required,oneof=pending processed cancelled"`
+	Status string `json:"status" binding:"required,oneof=pending attended cancelled"`
 }
 
 // NewRequest creates a new request

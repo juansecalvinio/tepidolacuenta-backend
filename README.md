@@ -780,7 +780,7 @@ Authorization: Bearer {token}
       "restaurantId": "64a7f9abc12345678901234",
       "tableId": "64a7fabc12345678901234",
       "tableNumber": 5,
-      "status": "processed",
+      "status": "attended",
       "createdAt": "2026-01-02T12:20:00Z",
       "updatedAt": "2026-01-02T12:22:00Z"
     }
@@ -837,13 +837,13 @@ Content-Type: application/json
 **Request Body:**
 ```json
 {
-  "status": "processed"
+  "status": "attended"
 }
 ```
 
 **Valores permitidos para `status`:**
 - `pending` - Pendiente
-- `processed` - Procesada
+- `attended` - Procesada
 - `cancelled` - Cancelada
 
 **Response:** `200 OK`
@@ -856,7 +856,7 @@ Content-Type: application/json
     "restaurantId": "64a7f9abc12345678901234",
     "tableId": "64a7fabc12345678901234",
     "tableNumber": 5,
-    "status": "processed",
+    "status": "attended",
     "createdAt": "2026-01-02T12:25:00Z",
     "updatedAt": "2026-01-02T12:30:00Z"
   }

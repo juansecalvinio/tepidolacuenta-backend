@@ -5,9 +5,9 @@ import (
 	"errors"
 
 	"juansecalvinio/tepidolacuenta/internal/pkg"
-	restaurantRepo "juansecalvinio/tepidolacuenta/internal/restaurant/repository"
 	"juansecalvinio/tepidolacuenta/internal/request/domain"
 	"juansecalvinio/tepidolacuenta/internal/request/repository"
+	restaurantRepo "juansecalvinio/tepidolacuenta/internal/restaurant/repository"
 	tableRepo "juansecalvinio/tepidolacuenta/internal/table/repository"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -170,7 +170,7 @@ func (uc *requestUseCase) UpdateStatus(ctx context.Context, id primitive.ObjectI
 	}
 
 	// Update status
-	request.UpdateStatus(input.Status)
+	request.UpdateStatus(domain.RequestStatus(input.Status))
 
 	if err := uc.repo.Update(ctx, request); err != nil {
 		return nil, err
