@@ -25,15 +25,17 @@ var upgrader = websocket.Upgrader{
 }
 
 type Handler struct {
-	useCase usecase.UseCase
-	hub     *pkg.Hub
+	useCase    usecase.UseCase
+	hub        *pkg.Hub
+	jwtService *pkg.JWTService
 }
 
 // NewRequestHandler creates a new request handler
-func NewRequestHandler(useCase usecase.UseCase, hub *pkg.Hub) *Handler {
+func NewRequestHandler(useCase usecase.UseCase, hub *pkg.Hub, jwtService *pkg.JWTService) *Handler {
 	return &Handler{
-		useCase: useCase,
-		hub:     hub,
+		useCase:    useCase,
+		hub:        hub,
+		jwtService: jwtService,
 	}
 }
 
@@ -320,13 +322,21 @@ func (h *Handler) Delete(c *gin.Context) {
 // WebSocket handles WebSocket connections for real-time notifications
 // @Summary WebSocket endpoint for real-time notifications
 // @Tags requests
-// @Security BearerAuth
 // @Param restaurantId path string true \"Restaurant ID\"
+// @Param token query string true \"JWT Token\"
 // @Router /api/v1/requests/ws/{restaurantId} [get]
 func (h *Handler) WebSocket(c *gin.Context) {
-	_, exists := middleware.GetUserID(c)
-	if !exists {
-		pkg.UnauthorizedResponse(c, "User not authenticated", pkg.ErrUnauthorized)
+	// Extract token from query parameter
+	tokenString := c.Query("token")
+	if tokenString == "" {
+		pkg.UnauthorizedResponse(c, "Token is required", pkg.ErrUnauthorized)
+		return
+	}
+
+	// Validate token
+	claims, err := h.jwtService.ValidateToken(tokenString)
+	if err != nil {
+		pkg.UnauthorizedResponse(c, "Invalid or expired token", err)
 		return
 	}
 
@@ -348,6 +358,7 @@ func (h *Handler) WebSocket(c *gin.Context) {
 	client := &pkg.Client{
 		ID:           uuid.New().String(),
 		RestaurantID: restaurantID,
+		UserID:       claims.UserID,
 		Conn:         conn,
 		Send:         make(chan []byte, 256),
 	}
@@ -373,6 +384,10 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup, publicRouter *gin.Rout
 		requests.GET("/restaurant/:restaurantId/pending", h.ListPendingByRestaurant)
 		requests.PUT("/:id/status", h.UpdateStatus)
 		requests.DELETE("/:id", h.Delete)
-		requests.GET("/ws/:restaurantId", h.WebSocket)
 	}
+}
+
+// RegisterWebSocketRoute registers the WebSocket route (without auth middleware)
+func (h *Handler) RegisterWebSocketRoute(router *gin.RouterGroup) {
+	router.GET("/requests/ws/:restaurantId", h.WebSocket)
 }

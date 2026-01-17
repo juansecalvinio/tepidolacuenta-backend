@@ -12,6 +12,7 @@ import (
 // Client represents a WebSocket client connection
 type Client struct {
 	ID           string
+	UserID       string
 	RestaurantID primitive.ObjectID
 	Conn         *websocket.Conn
 	Send         chan []byte
