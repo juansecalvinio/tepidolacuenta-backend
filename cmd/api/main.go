@@ -86,7 +86,7 @@ func main() {
 		qrService,
 		notifyFunc,
 	)
-	requestHdlr := requestHandler.NewRequestHandler(requestService, hub)
+	requestHdlr := requestHandler.NewRequestHandler(requestService, hub, jwtService)
 
 	// Set Gin mode
 	gin.SetMode(cfg.GinMode)
@@ -133,10 +133,13 @@ func main() {
 
 			// Table routes
 			tableHdlr.RegisterRoutes(protected)
+
+			// Request routes (both public and protected)
+			requestHdlr.RegisterRoutes(protected, publicV1)
 		}
 
-		// Request routes (both public and protected)
-		requestHdlr.RegisterRoutes(protected, publicV1)
+		// WebSocket route (no authentication middleware, but validates token in handler)
+		requestHdlr.RegisterWebSocketRoute(v1)
 	}
 
 	log.Printf("🚀 Server running on port %s\n", cfg.Port)
