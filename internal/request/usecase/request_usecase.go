@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	branchRepo "juansecalvinio/tepidolacuenta/internal/branch/repository"
 	"juansecalvinio/tepidolacuenta/internal/pkg"
 	"juansecalvinio/tepidolacuenta/internal/request/domain"
 	"juansecalvinio/tepidolacuenta/internal/request/repository"
@@ -26,6 +27,7 @@ type UseCase interface {
 type requestUseCase struct {
 	repo           repository.Repository
 	restaurantRepo restaurantRepo.Repository
+	branchRepo     branchRepo.Repository
 	tableRepo      tableRepo.Repository
 	qrService      *pkg.QRService
 	notifyFunc     func(restaurantID primitive.ObjectID, request *domain.Request)
@@ -35,6 +37,7 @@ type requestUseCase struct {
 func NewRequestUseCase(
 	repo repository.Repository,
 	restaurantRepo restaurantRepo.Repository,
+	branchRepo branchRepo.Repository,
 	tableRepo tableRepo.Repository,
 	qrService *pkg.QRService,
 	notifyFunc func(restaurantID primitive.ObjectID, request *domain.Request),
@@ -42,6 +45,7 @@ func NewRequestUseCase(
 	return &requestUseCase{
 		repo:           repo,
 		restaurantRepo: restaurantRepo,
+		branchRepo:     branchRepo,
 		tableRepo:      tableRepo,
 		qrService:      qrService,
 		notifyFunc:     notifyFunc,
@@ -56,13 +60,18 @@ func (uc *requestUseCase) Create(ctx context.Context, input domain.CreateRequest
 		return nil, errors.New("invalid restaurant ID")
 	}
 
+	branchID, err := primitive.ObjectIDFromHex(input.BranchID)
+	if err != nil {
+		return nil, errors.New("invalid branch ID")
+	}
+
 	tableID, err := primitive.ObjectIDFromHex(input.TableID)
 	if err != nil {
 		return nil, errors.New("invalid table ID")
 	}
 
 	// Validate QR code
-	if !uc.qrService.ValidateTableQRCode(restaurantID, tableID, input.TableNumber, input.Hash) {
+	if !uc.qrService.ValidateTableQRCode(restaurantID, branchID, tableID, input.TableNumber, input.Hash) {
 		return nil, errors.New("invalid QR code")
 	}
 
@@ -72,14 +81,28 @@ func (uc *requestUseCase) Create(ctx context.Context, input domain.CreateRequest
 		return nil, err
 	}
 
-	// Verify table exists and belongs to restaurant
+	// Verify branch exists and belongs to restaurant
+	branch, err := uc.branchRepo.FindByID(ctx, branchID)
+	if err != nil {
+		return nil, err
+	}
+
+	if branch.RestaurantID != restaurantID {
+		return nil, errors.New("branch does not belong to restaurant")
+	}
+
+	if !branch.IsActive {
+		return nil, errors.New("branch is not active")
+	}
+
+	// Verify table exists and belongs to branch
 	table, err := uc.tableRepo.FindByID(ctx, tableID)
 	if err != nil {
 		return nil, err
 	}
 
-	if table.RestaurantID != restaurantID {
-		return nil, errors.New("table does not belong to restaurant")
+	if table.BranchID != branchID {
+		return nil, errors.New("table does not belong to branch")
 	}
 
 	if !table.IsActive {
@@ -87,7 +110,7 @@ func (uc *requestUseCase) Create(ctx context.Context, input domain.CreateRequest
 	}
 
 	// Create request
-	request := domain.NewRequest(restaurantID, tableID, input.TableNumber)
+	request := domain.NewRequest(restaurantID, branchID, tableID, input.TableNumber)
 
 	if err := uc.repo.Create(ctx, request); err != nil {
 		return nil, err

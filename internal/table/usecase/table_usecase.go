@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	branchRepo "juansecalvinio/tepidolacuenta/internal/branch/repository"
 	"juansecalvinio/tepidolacuenta/internal/pkg"
 	restaurantRepo "juansecalvinio/tepidolacuenta/internal/restaurant/repository"
 	"juansecalvinio/tepidolacuenta/internal/table/domain"
@@ -18,24 +19,45 @@ type UseCase interface {
 	Create(ctx context.Context, userID primitive.ObjectID, input domain.CreateTableInput) (*domain.Table, error)
 	BulkCreate(ctx context.Context, userID primitive.ObjectID, input domain.BulkCreateTablesInput) ([]*domain.Table, error)
 	GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) (*domain.Table, error)
-	GetByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID) ([]*domain.Table, error)
+	GetByBranchID(ctx context.Context, branchID primitive.ObjectID, userID primitive.ObjectID) ([]*domain.Table, error)
 	Update(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, input domain.UpdateTableInput) (*domain.Table, error)
 	Delete(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) error
 }
 
 type tableUseCase struct {
 	repo           repository.Repository
+	branchRepo     branchRepo.Repository
 	restaurantRepo restaurantRepo.Repository
 	qrService      *pkg.QRService
 }
 
 // NewTableUseCase creates a new table use case
-func NewTableUseCase(repo repository.Repository, restaurantRepo restaurantRepo.Repository, qrService *pkg.QRService) UseCase {
+func NewTableUseCase(repo repository.Repository, branchRepo branchRepo.Repository, restaurantRepo restaurantRepo.Repository, qrService *pkg.QRService) UseCase {
 	return &tableUseCase{
 		repo:           repo,
+		branchRepo:     branchRepo,
 		restaurantRepo: restaurantRepo,
 		qrService:      qrService,
 	}
+}
+
+// verifyBranchOwnership verifies that a branch exists and the user owns it
+func (uc *tableUseCase) verifyBranchOwnership(ctx context.Context, branchID, userID primitive.ObjectID) (*primitive.ObjectID, error) {
+	branch, err := uc.branchRepo.FindByID(ctx, branchID)
+	if err != nil {
+		return nil, err
+	}
+
+	restaurant, err := uc.restaurantRepo.FindByID(ctx, branch.RestaurantID)
+	if err != nil {
+		return nil, err
+	}
+
+	if restaurant.UserID != userID {
+		return nil, pkg.ErrUnauthorized
+	}
+
+	return &branch.RestaurantID, nil
 }
 
 // Create creates a new table
@@ -45,34 +67,30 @@ func (uc *tableUseCase) Create(ctx context.Context, userID primitive.ObjectID, i
 		return nil, errors.New("table number must be greater than 0")
 	}
 
-	// Parse restaurant ID
-	restaurantID, err := primitive.ObjectIDFromHex(input.RestaurantID)
+	// Parse branch ID
+	branchID, err := primitive.ObjectIDFromHex(input.BranchID)
 	if err != nil {
-		return nil, errors.New("invalid restaurant ID")
+		return nil, errors.New("invalid branch ID")
 	}
 
-	// Verify restaurant exists and user owns it
-	restaurant, err := uc.restaurantRepo.FindByID(ctx, restaurantID)
+	// Verify branch exists and user owns it
+	restaurantID, err := uc.verifyBranchOwnership(ctx, branchID, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	if restaurant.UserID != userID {
-		return nil, pkg.ErrUnauthorized
-	}
-
-	// Check if table number already exists for this restaurant
-	existingTable, err := uc.repo.FindByRestaurantAndNumber(ctx, restaurantID, input.Number)
+	// Check if table number already exists for this branch
+	existingTable, err := uc.repo.FindByBranchAndNumber(ctx, branchID, input.Number)
 	if err != nil {
 		return nil, err
 	}
 
 	if existingTable != nil {
-		return nil, fmt.Errorf("table number %d already exists for this restaurant", input.Number)
+		return nil, fmt.Errorf("table number %d already exists for this branch", input.Number)
 	}
 
 	// Create table with temporary ID for QR generation
-	tempTable := domain.NewTable(restaurantID, input.Number, input.Capacity, "")
+	tempTable := domain.NewTable(branchID, input.Number, "")
 
 	// Save to get the actual ID
 	if err := uc.repo.Create(ctx, tempTable); err != nil {
@@ -80,7 +98,7 @@ func (uc *tableUseCase) Create(ctx context.Context, userID primitive.ObjectID, i
 	}
 
 	// Generate QR code with the actual table ID
-	qrCode := uc.qrService.GenerateTableQRCode(restaurantID, tempTable.ID, input.Number)
+	qrCode := uc.qrService.GenerateTableQRCode(*restaurantID, branchID, tempTable.ID, input.Number)
 	tempTable.QRCode = qrCode
 
 	// Update with QR code
@@ -91,26 +109,22 @@ func (uc *tableUseCase) Create(ctx context.Context, userID primitive.ObjectID, i
 	return tempTable, nil
 }
 
-// BulkCreate creates multiple tables for a restaurant
+// BulkCreate creates multiple tables for a branch
 func (uc *tableUseCase) BulkCreate(ctx context.Context, userID primitive.ObjectID, input domain.BulkCreateTablesInput) ([]*domain.Table, error) {
-	// Parse restaurant ID
-	restaurantID, err := primitive.ObjectIDFromHex(input.RestaurantID)
+	// Parse branch ID
+	branchID, err := primitive.ObjectIDFromHex(input.BranchID)
 	if err != nil {
-		return nil, errors.New("invalid restaurant ID")
+		return nil, errors.New("invalid branch ID")
 	}
 
-	// Verify restaurant exists and user owns it
-	restaurant, err := uc.restaurantRepo.FindByID(ctx, restaurantID)
+	// Verify branch exists and user owns it
+	restaurantID, err := uc.verifyBranchOwnership(ctx, branchID, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	if restaurant.UserID != userID {
-		return nil, pkg.ErrUnauthorized
-	}
-
 	// Get existing tables to determine starting number
-	existingTables, err := uc.repo.FindByRestaurantID(ctx, restaurantID)
+	existingTables, err := uc.repo.FindByBranchID(ctx, branchID)
 	if err != nil {
 		return nil, err
 	}
@@ -128,8 +142,8 @@ func (uc *tableUseCase) BulkCreate(ctx context.Context, userID primitive.ObjectI
 	for i := 1; i <= input.Count; i++ {
 		tableNumber := maxTableNumber + i
 
-		// Create table with default capacity of 4
-		newTable := domain.NewTable(restaurantID, tableNumber, 4, "")
+		// Create table
+		newTable := domain.NewTable(branchID, tableNumber, "")
 
 		// Save to get the actual ID
 		if err := uc.repo.Create(ctx, newTable); err != nil {
@@ -137,7 +151,7 @@ func (uc *tableUseCase) BulkCreate(ctx context.Context, userID primitive.ObjectI
 		}
 
 		// Generate QR code with the actual table ID
-		qrCode := uc.qrService.GenerateTableQRCode(restaurantID, newTable.ID, tableNumber)
+		qrCode := uc.qrService.GenerateTableQRCode(*restaurantID, branchID, newTable.ID, tableNumber)
 		newTable.QRCode = qrCode
 
 		// Update with QR code
@@ -158,32 +172,24 @@ func (uc *tableUseCase) GetByID(ctx context.Context, id primitive.ObjectID, user
 		return nil, err
 	}
 
-	// Verify user owns the restaurant
-	restaurant, err := uc.restaurantRepo.FindByID(ctx, table.RestaurantID)
+	// Verify user owns the branch
+	_, err = uc.verifyBranchOwnership(ctx, table.BranchID, userID)
 	if err != nil {
 		return nil, err
-	}
-
-	if restaurant.UserID != userID {
-		return nil, pkg.ErrUnauthorized
 	}
 
 	return table, nil
 }
 
-// GetByRestaurantID retrieves all tables for a restaurant
-func (uc *tableUseCase) GetByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID) ([]*domain.Table, error) {
-	// Verify user owns the restaurant
-	restaurant, err := uc.restaurantRepo.FindByID(ctx, restaurantID)
+// GetByBranchID retrieves all tables for a branch
+func (uc *tableUseCase) GetByBranchID(ctx context.Context, branchID primitive.ObjectID, userID primitive.ObjectID) ([]*domain.Table, error) {
+	// Verify user owns the branch
+	_, err := uc.verifyBranchOwnership(ctx, branchID, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	if restaurant.UserID != userID {
-		return nil, pkg.ErrUnauthorized
-	}
-
-	return uc.repo.FindByRestaurantID(ctx, restaurantID)
+	return uc.repo.FindByBranchID(ctx, branchID)
 }
 
 // Update updates a table
@@ -194,14 +200,10 @@ func (uc *tableUseCase) Update(ctx context.Context, id primitive.ObjectID, userI
 		return nil, err
 	}
 
-	// Verify user owns the restaurant
-	restaurant, err := uc.restaurantRepo.FindByID(ctx, table.RestaurantID)
+	// Verify user owns the branch
+	restaurantID, err := uc.verifyBranchOwnership(ctx, table.BranchID, userID)
 	if err != nil {
 		return nil, err
-	}
-
-	if restaurant.UserID != userID {
-		return nil, pkg.ErrUnauthorized
 	}
 
 	// Update fields if provided
@@ -213,21 +215,17 @@ func (uc *tableUseCase) Update(ctx context.Context, id primitive.ObjectID, userI
 		}
 
 		// Check if new number already exists (excluding current table)
-		existingTable, err := uc.repo.FindByRestaurantAndNumber(ctx, table.RestaurantID, input.Number)
+		existingTable, err := uc.repo.FindByBranchAndNumber(ctx, table.BranchID, input.Number)
 		if err != nil {
 			return nil, err
 		}
 
 		if existingTable != nil && existingTable.ID != table.ID {
-			return nil, fmt.Errorf("table number %d already exists for this restaurant", input.Number)
+			return nil, fmt.Errorf("table number %d already exists for this branch", input.Number)
 		}
 
 		table.Number = input.Number
 		needsQRUpdate = true
-	}
-
-	if input.Capacity != 0 {
-		table.Capacity = input.Capacity
 	}
 
 	if input.IsActive != nil {
@@ -236,7 +234,7 @@ func (uc *tableUseCase) Update(ctx context.Context, id primitive.ObjectID, userI
 
 	// Regenerate QR code if number changed
 	if needsQRUpdate {
-		qrCode := uc.qrService.GenerateTableQRCode(table.RestaurantID, table.ID, table.Number)
+		qrCode := uc.qrService.GenerateTableQRCode(*restaurantID, table.BranchID, table.ID, table.Number)
 		table.QRCode = qrCode
 	}
 
@@ -256,14 +254,10 @@ func (uc *tableUseCase) Delete(ctx context.Context, id primitive.ObjectID, userI
 		return err
 	}
 
-	// Verify user owns the restaurant
-	restaurant, err := uc.restaurantRepo.FindByID(ctx, table.RestaurantID)
+	// Verify user owns the branch
+	_, err = uc.verifyBranchOwnership(ctx, table.BranchID, userID)
 	if err != nil {
 		return err
-	}
-
-	if restaurant.UserID != userID {
-		return pkg.ErrUnauthorized
 	}
 
 	return uc.repo.Delete(ctx, id)

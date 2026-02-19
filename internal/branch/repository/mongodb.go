@@ -5,8 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"juansecalvinio/tepidolacuenta/internal/branch/domain"
 	"juansecalvinio/tepidolacuenta/internal/pkg"
-	"juansecalvinio/tepidolacuenta/internal/restaurant/domain"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -17,32 +17,31 @@ type mongoRepository struct {
 	collection *mongo.Collection
 }
 
-// NewMongoRepository creates a new MongoDB repository for restaurants
 func NewMongoRepository(db *mongo.Database) Repository {
 	return &mongoRepository{
-		collection: db.Collection("restaurants"),
+		collection: db.Collection("branches"),
 	}
 }
 
-func (r *mongoRepository) Create(ctx context.Context, restaurant *domain.Restaurant) error {
+func (r *mongoRepository) Create(ctx context.Context, branch *domain.Branch) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	result, err := r.collection.InsertOne(ctx, restaurant)
+	result, err := r.collection.InsertOne(ctx, branch)
 	if err != nil {
 		return err
 	}
 
-	restaurant.ID = result.InsertedID.(primitive.ObjectID)
+	branch.ID = result.InsertedID.(primitive.ObjectID)
 	return nil
 }
 
-func (r *mongoRepository) FindByID(ctx context.Context, id primitive.ObjectID) (*domain.Restaurant, error) {
+func (r *mongoRepository) FindByID(ctx context.Context, id primitive.ObjectID) (*domain.Branch, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	var restaurant domain.Restaurant
-	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&restaurant)
+	var branch domain.Branch
+	err := r.collection.FindOne(ctx, bson.M{"_id": id}).Decode(&branch)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, pkg.ErrNotFound
@@ -50,42 +49,43 @@ func (r *mongoRepository) FindByID(ctx context.Context, id primitive.ObjectID) (
 		return nil, err
 	}
 
-	return &restaurant, nil
+	return &branch, nil
 }
 
-func (r *mongoRepository) FindByUserID(ctx context.Context, userID primitive.ObjectID) ([]*domain.Restaurant, error) {
+func (r *mongoRepository) FindByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID) ([]*domain.Branch, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	cursor, err := r.collection.Find(ctx, bson.M{"user_id": userID})
+	cursor, err := r.collection.Find(ctx, bson.M{"restaurant_id": restaurantID})
 	if err != nil {
 		return nil, err
 	}
 	defer cursor.Close(ctx)
 
-	// Initialize with empty slice instead of nil
-	restaurants := make([]*domain.Restaurant, 0)
-	if err := cursor.All(ctx, &restaurants); err != nil {
+	branches := make([]*domain.Branch, 0)
+	if err := cursor.All(ctx, &branches); err != nil {
 		return nil, err
 	}
 
-	return restaurants, nil
+	return branches, nil
 }
 
-func (r *mongoRepository) Update(ctx context.Context, restaurant *domain.Restaurant) error {
+func (r *mongoRepository) Update(ctx context.Context, branch *domain.Branch) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	restaurant.UpdatedAt = time.Now()
+	branch.UpdatedAt = time.Now()
 
 	update := bson.M{
 		"$set": bson.M{
-			"name":       restaurant.Name,
-			"updated_at": restaurant.UpdatedAt,
+			"address":     branch.Address,
+			"description": branch.Description,
+			"is_active":   branch.IsActive,
+			"updated_at":  branch.UpdatedAt,
 		},
 	}
 
-	result, err := r.collection.UpdateOne(ctx, bson.M{"_id": restaurant.ID}, update)
+	result, err := r.collection.UpdateOne(ctx, bson.M{"_id": branch.ID}, update)
 	if err != nil {
 		return err
 	}

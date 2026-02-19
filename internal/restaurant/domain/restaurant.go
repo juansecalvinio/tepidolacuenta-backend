@@ -7,42 +7,34 @@ import (
 )
 
 type Restaurant struct {
-	ID          primitive.ObjectID `json:"id" bson:"_id,omitempty"`
-	UserID      primitive.ObjectID `json:"userId" bson:"user_id"`
-	Name        string             `json:"name" bson:"name"`
-	Address     string             `json:"address" bson:"address"`
-	Phone       string             `json:"phone" bson:"phone"`
-	Description string             `json:"description,omitempty" bson:"description,omitempty"`
-	CreatedAt   time.Time          `json:"createdAt" bson:"created_at"`
-	UpdatedAt   time.Time          `json:"updatedAt" bson:"updated_at"`
+	ID        primitive.ObjectID `json:"id" bson:"_id,omitempty"`
+	UserID    primitive.ObjectID `json:"userId" bson:"user_id"`
+	Name      string             `json:"name" bson:"name"`
+	CUIT      string             `json:"cuit" bson:"cuit,unique"`
+	CreatedAt time.Time          `json:"createdAt" bson:"created_at"`
+	UpdatedAt time.Time          `json:"updatedAt" bson:"updated_at"`
 }
 
 // CreateRestaurantInput represents the data needed to create a restaurant
 type CreateRestaurantInput struct {
-	Name        string `json:"name" binding:"required,min=3,max=100"`
-	Address     string `json:"address,omitempty" binding:"max=200"`
-	Phone       string `json:"phone,omitempty" binding:"max=20"`
-	Description string `json:"description,omitempty" binding:"max=500"`
+	Name string `json:"name" binding:"required,min=3,max=100"`
+	CUIT string `json:"cuit" binding:"required"`
 }
 
 // UpdateRestaurantInput represents the data needed to update a restaurant
 type UpdateRestaurantInput struct {
-	Name        string `json:"name,omitempty" binding:"omitempty,min=3,max=100"`
-	Address     string `json:"address,omitempty" binding:"omitempty,max=200"`
-	Phone       string `json:"phone,omitempty" binding:"omitempty,max=20"`
-	Description string `json:"description,omitempty" binding:"max=500"`
+	Name string `json:"name,omitempty" binding:"omitempty,min=3,max=100"`
+	CUIT string `json:"cuit,omitempty" binding:"omitempty"`
 }
 
 // NewRestaurant creates a new restaurant with the current timestamp
-func NewRestaurant(userID primitive.ObjectID, name, address, phone, description string) *Restaurant {
+func NewRestaurant(userID primitive.ObjectID, name string, cuit string) *Restaurant {
 	now := time.Now()
 	return &Restaurant{
-		UserID:      userID,
-		Name:        name,
-		Address:     address,
-		Phone:       phone,
-		Description: description,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		UserID:    userID,
+		Name:      name,
+		CUIT:      cuit,
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 }

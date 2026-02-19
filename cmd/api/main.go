@@ -18,6 +18,10 @@ import (
 	restaurantRepo "juansecalvinio/tepidolacuenta/internal/restaurant/repository"
 	restaurantUseCase "juansecalvinio/tepidolacuenta/internal/restaurant/usecase"
 
+	branchHandler "juansecalvinio/tepidolacuenta/internal/branch/handler"
+	branchRepo "juansecalvinio/tepidolacuenta/internal/branch/repository"
+	branchUseCase "juansecalvinio/tepidolacuenta/internal/branch/usecase"
+
 	tableHandler "juansecalvinio/tepidolacuenta/internal/table/handler"
 	tableRepo "juansecalvinio/tepidolacuenta/internal/table/repository"
 	tableUseCase "juansecalvinio/tepidolacuenta/internal/table/usecase"
@@ -26,6 +30,9 @@ import (
 	requestHandler "juansecalvinio/tepidolacuenta/internal/request/handler"
 	requestRepo "juansecalvinio/tepidolacuenta/internal/request/repository"
 	requestUseCase "juansecalvinio/tepidolacuenta/internal/request/usecase"
+
+	setupHandler "juansecalvinio/tepidolacuenta/internal/setup/handler"
+	setupUseCase "juansecalvinio/tepidolacuenta/internal/setup/usecase"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -66,10 +73,19 @@ func main() {
 	restaurantService := restaurantUseCase.NewRestaurantUseCase(restaurantRepository)
 	restaurantHdlr := restaurantHandler.NewRestaurantHandler(restaurantService)
 
+	// Initialize Branch module
+	branchRepository := branchRepo.NewMongoRepository(db.Database)
+	branchService := branchUseCase.NewBranchUseCase(branchRepository, restaurantRepository)
+	branchHdlr := branchHandler.NewBranchHandler(branchService)
+
 	// Initialize Table module
 	tableRepository := tableRepo.NewMongoRepository(db.Database)
-	tableService := tableUseCase.NewTableUseCase(tableRepository, restaurantRepository, qrService)
+	tableService := tableUseCase.NewTableUseCase(tableRepository, branchRepository, restaurantRepository, qrService)
 	tableHdlr := tableHandler.NewTableHandler(tableService)
+
+	// Initialize Setup module
+	setupService := setupUseCase.NewSetupUseCase(restaurantRepository, branchRepository, tableRepository, qrService)
+	setupHdlr := setupHandler.NewSetupHandler(setupService)
 
 	// Initialize Request module
 	requestRepository := requestRepo.NewMongoRepository(db.Database)
@@ -82,6 +98,7 @@ func main() {
 	requestService := requestUseCase.NewRequestUseCase(
 		requestRepository,
 		restaurantRepository,
+		branchRepository,
 		tableRepository,
 		qrService,
 		notifyFunc,
@@ -131,8 +148,14 @@ func main() {
 			// Restaurant routes
 			restaurantHdlr.RegisterRoutes(protected)
 
+			// Branch routes
+			branchHdlr.RegisterRoutes(protected)
+
 			// Table routes
 			tableHdlr.RegisterRoutes(protected)
+
+			// Setup routes
+			setupHdlr.RegisterRoutes(protected)
 
 			// Request routes (both public and protected)
 			requestHdlr.RegisterRoutes(protected, publicV1)

@@ -53,11 +53,11 @@ func (r *mongoRepository) FindByID(ctx context.Context, id primitive.ObjectID) (
 	return &table, nil
 }
 
-func (r *mongoRepository) FindByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID) ([]*domain.Table, error) {
+func (r *mongoRepository) FindByBranchID(ctx context.Context, branchID primitive.ObjectID) ([]*domain.Table, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	cursor, err := r.collection.Find(ctx, bson.M{"restaurant_id": restaurantID})
+	cursor, err := r.collection.Find(ctx, bson.M{"branch_id": branchID})
 	if err != nil {
 		return nil, err
 	}
@@ -72,14 +72,14 @@ func (r *mongoRepository) FindByRestaurantID(ctx context.Context, restaurantID p
 	return tables, nil
 }
 
-func (r *mongoRepository) FindByRestaurantAndNumber(ctx context.Context, restaurantID primitive.ObjectID, number int) (*domain.Table, error) {
+func (r *mongoRepository) FindByBranchAndNumber(ctx context.Context, branchID primitive.ObjectID, number int) (*domain.Table, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	var table domain.Table
 	err := r.collection.FindOne(ctx, bson.M{
-		"restaurant_id": restaurantID,
-		"number":        number,
+		"branch_id": branchID,
+		"number":    number,
 	}).Decode(&table)
 
 	if err != nil {
@@ -101,7 +101,6 @@ func (r *mongoRepository) Update(ctx context.Context, table *domain.Table) error
 	update := bson.M{
 		"$set": bson.M{
 			"number":     table.Number,
-			"capacity":   table.Capacity,
 			"qr_code":    table.QRCode,
 			"is_active":  table.IsActive,
 			"updated_at": table.UpdatedAt,

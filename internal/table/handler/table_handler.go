@@ -59,11 +59,11 @@ func (h *Handler) Create(c *gin.Context) {
 	table, err := h.useCase.Create(c.Request.Context(), userID, input)
 	if err != nil {
 		if errors.Is(err, pkg.ErrUnauthorized) {
-			pkg.UnauthorizedResponse(c, "You don't have access to this restaurant", err)
+			pkg.UnauthorizedResponse(c, "You don't have access to this branch", err)
 			return
 		}
 		if errors.Is(err, pkg.ErrNotFound) {
-			pkg.NotFoundResponse(c, "Restaurant not found", err)
+			pkg.NotFoundResponse(c, "Branch not found", err)
 			return
 		}
 		pkg.InternalServerErrorResponse(c, "Failed to create table", err)
@@ -108,11 +108,11 @@ func (h *Handler) BulkCreate(c *gin.Context) {
 	tables, err := h.useCase.BulkCreate(c.Request.Context(), userID, input)
 	if err != nil {
 		if errors.Is(err, pkg.ErrUnauthorized) {
-			pkg.UnauthorizedResponse(c, "You don't have access to this restaurant", err)
+			pkg.UnauthorizedResponse(c, "You don't have access to this branch", err)
 			return
 		}
 		if errors.Is(err, pkg.ErrNotFound) {
-			pkg.NotFoundResponse(c, "Restaurant not found", err)
+			pkg.NotFoundResponse(c, "Branch not found", err)
 			return
 		}
 		pkg.InternalServerErrorResponse(c, "Failed to create tables", err)
@@ -173,18 +173,18 @@ func (h *Handler) GetByID(c *gin.Context) {
 	pkg.SuccessResponse(c, http.StatusOK, "Table retrieved successfully", table)
 }
 
-// ListByRestaurant handles retrieving all tables for a restaurant
-// @Summary List tables by restaurant
+// ListByBranch handles retrieving all tables for a branch
+// @Summary List tables by branch
 // @Tags tables
 // @Produce json
 // @Security BearerAuth
-// @Param restaurantId path string true "Restaurant ID"
+// @Param branchId path string true "Branch ID"
 // @Success 200 {object} pkg.Response{data=[]domain.Table}
 // @Failure 400 {object} pkg.Response
 // @Failure 401 {object} pkg.Response
 // @Failure 500 {object} pkg.Response
-// @Router /api/v1/tables/restaurant/{restaurantId} [get]
-func (h *Handler) ListByRestaurant(c *gin.Context) {
+// @Router /api/v1/tables/branch/{branchId} [get]
+func (h *Handler) ListByBranch(c *gin.Context) {
 	// Get user ID from context
 	userIDStr, exists := middleware.GetUserID(c)
 	if !exists {
@@ -198,22 +198,22 @@ func (h *Handler) ListByRestaurant(c *gin.Context) {
 		return
 	}
 
-	// Get restaurant ID from URL
-	restaurantIDStr := c.Param("restaurantId")
-	restaurantID, err := primitive.ObjectIDFromHex(restaurantIDStr)
+	// Get branch ID from URL
+	branchIDStr := c.Param("branchId")
+	branchID, err := primitive.ObjectIDFromHex(branchIDStr)
 	if err != nil {
-		pkg.BadRequestResponse(c, "Invalid restaurant ID", err)
+		pkg.BadRequestResponse(c, "Invalid branch ID", err)
 		return
 	}
 
-	tables, err := h.useCase.GetByRestaurantID(c.Request.Context(), restaurantID, userID)
+	tables, err := h.useCase.GetByBranchID(c.Request.Context(), branchID, userID)
 	if err != nil {
 		if errors.Is(err, pkg.ErrNotFound) {
-			pkg.NotFoundResponse(c, "Restaurant not found", err)
+			pkg.NotFoundResponse(c, "Branch not found", err)
 			return
 		}
 		if errors.Is(err, pkg.ErrUnauthorized) {
-			pkg.UnauthorizedResponse(c, "You don't have access to this restaurant", err)
+			pkg.UnauthorizedResponse(c, "You don't have access to this branch", err)
 			return
 		}
 		pkg.InternalServerErrorResponse(c, "Failed to get tables", err)
@@ -339,7 +339,7 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 		tables.POST("", h.Create)
 		tables.POST("/bulk", h.BulkCreate)
 		tables.GET("/:id", h.GetByID)
-		tables.GET("/restaurant/:restaurantId", h.ListByRestaurant)
+		tables.GET("/branch/:branchId", h.ListByBranch)
 		tables.PUT("/:id", h.Update)
 		tables.DELETE("/:id", h.Delete)
 	}

@@ -22,19 +22,20 @@ func NewQRService(baseURL string) *QRService {
 
 // GenerateTableQRCode generates a unique QR code for a table
 // The QR code contains a URL that points to the request page with encrypted data
-func (s *QRService) GenerateTableQRCode(restaurantID primitive.ObjectID, tableID primitive.ObjectID, tableNumber int) string {
-	// Create a payload with restaurant and table info
-	payload := fmt.Sprintf("%s:%s:%d", restaurantID.Hex(), tableID.Hex(), tableNumber)
+func (s *QRService) GenerateTableQRCode(restaurantID, branchID, tableID primitive.ObjectID, tableNumber int) string {
+	// Create a payload with restaurant, branch and table info
+	payload := fmt.Sprintf("%s:%s:%s:%d", restaurantID.Hex(), branchID.Hex(), tableID.Hex(), tableNumber)
 
 	// Generate a hash for security (could be enhanced with encryption)
 	hash := sha256.Sum256([]byte(payload))
 	encodedPayload := base64.URLEncoding.EncodeToString(hash[:])
 
 	// Create the QR code URL
-	// Format: https://tepidolacuenta.com/request?r=restaurantID&t=tableID&n=number&h=hash
-	qrCodeURL := fmt.Sprintf("%s/request?r=%s&t=%s&n=%d&h=%s",
+	// Format: https://tepidolacuenta.com/request?r=restaurantID&b=branchID&t=tableID&n=number&h=hash
+	qrCodeURL := fmt.Sprintf("%s/request?r=%s&b=%s&t=%s&n=%d&h=%s",
 		s.baseURL,
 		restaurantID.Hex(),
+		branchID.Hex(),
 		tableID.Hex(),
 		tableNumber,
 		encodedPayload[:16], // Use first 16 chars of hash
@@ -44,9 +45,9 @@ func (s *QRService) GenerateTableQRCode(restaurantID primitive.ObjectID, tableID
 }
 
 // ValidateTableQRCode validates that a QR code is authentic
-func (s *QRService) ValidateTableQRCode(restaurantID, tableID primitive.ObjectID, tableNumber int, hash string) bool {
+func (s *QRService) ValidateTableQRCode(restaurantID, branchID, tableID primitive.ObjectID, tableNumber int, hash string) bool {
 	// Generate expected hash
-	payload := fmt.Sprintf("%s:%s:%d", restaurantID.Hex(), tableID.Hex(), tableNumber)
+	payload := fmt.Sprintf("%s:%s:%s:%d", restaurantID.Hex(), branchID.Hex(), tableID.Hex(), tableNumber)
 	expectedHash := sha256.Sum256([]byte(payload))
 	expectedEncoded := base64.URLEncoding.EncodeToString(expectedHash[:])
 

@@ -11,7 +11,6 @@ type User struct {
 	ID        primitive.ObjectID `json:"id" bson:"_id,omitempty"`
 	Email     string             `json:"email" bson:"email"`
 	Password  string             `json:"-" bson:"password"`
-	Username  string             `json:"username" bson:"restaurant_name"`
 	CreatedAt time.Time          `json:"createdAt" bson:"created_at"`
 	UpdatedAt time.Time          `json:"updatedAt" bson:"updated_at"`
 }
@@ -20,7 +19,6 @@ type User struct {
 type RegisterInput struct {
 	Email    string `json:"email" binding:"required,email"`
 	Password string `json:"password" binding:"required,min=8"`
-	Username string `json:"username" binding:"required,min=3"`
 }
 
 // LoginInput represents the data needed to login
@@ -51,12 +49,11 @@ func (u *User) ComparePassword(password string) error {
 }
 
 // NewUser creates a new user with the current timestamp
-func NewUser(email, password, username string) *User {
+func NewUser(email, password string) *User {
 	now := time.Now()
 	return &User{
 		Email:     email,
 		Password:  password,
-		Username:  username,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}

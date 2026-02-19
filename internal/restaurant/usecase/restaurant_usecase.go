@@ -2,7 +2,6 @@ package usecase
 
 import (
 	"context"
-	"errors"
 
 	"juansecalvinio/tepidolacuenta/internal/pkg"
 	"juansecalvinio/tepidolacuenta/internal/restaurant/domain"
@@ -33,13 +32,8 @@ func NewRestaurantUseCase(repo repository.Repository) UseCase {
 
 // Create creates a new restaurant
 func (uc *restaurantUseCase) Create(ctx context.Context, userID primitive.ObjectID, input domain.CreateRestaurantInput) (*domain.Restaurant, error) {
-	// Validate input
-	if !pkg.IsValidUsername(input.Name) {
-		return nil, errors.New("restaurant name must be between 3 and 100 characters")
-	}
-
 	// Create restaurant
-	restaurant := domain.NewRestaurant(userID, input.Name, input.Address, input.Phone, input.Description)
+	restaurant := domain.NewRestaurant(userID, input.Name, input.CUIT)
 
 	// Save to database
 	if err := uc.repo.Create(ctx, restaurant); err != nil {
@@ -84,22 +78,7 @@ func (uc *restaurantUseCase) Update(ctx context.Context, id primitive.ObjectID, 
 
 	// Update fields if provided
 	if input.Name != "" {
-		if !pkg.IsValidUsername(input.Name) {
-			return nil, errors.New("restaurant name must be between 3 and 100 characters")
-		}
 		restaurant.Name = input.Name
-	}
-
-	if input.Address != "" {
-		restaurant.Address = input.Address
-	}
-
-	if input.Phone != "" {
-		restaurant.Phone = input.Phone
-	}
-
-	if input.Description != "" {
-		restaurant.Description = input.Description
 	}
 
 	// Save changes
