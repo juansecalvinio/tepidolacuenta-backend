@@ -8,12 +8,20 @@ import (
 )
 
 type Config struct {
-	MongoURI            string
-	JWTSecret           string
-	Port                string
-	GinMode             string
-	CORSAllowedOrigins  []string
-	FrontendBaseURL     string
+	MongoURI             string
+	JWTSecret            string
+	Port                 string
+	GinMode              string
+	CORSAllowedOrigins   []string
+	FrontendBaseURL      string
+	SMTPHost             string
+	SMTPPort             string
+	SMTPUsername         string
+	SMTPPassword         string
+	SMTPFrom             string
+	GoogleClientID       string
+	GoogleClientSecret   string
+	GoogleRedirectURL    string
 }
 
 func Load() (*Config, error) {
@@ -34,6 +42,14 @@ func Load() (*Config, error) {
 		GinMode:            getEnv("GIN_MODE", "debug"),
 		CORSAllowedOrigins: originsSlice,
 		FrontendBaseURL:    getEnv("FRONTEND_BASE_URL", "http://localhost:5173"),
+		SMTPHost:           getEnv("SMTP_HOST", ""),
+		SMTPPort:           getEnv("SMTP_PORT", "587"),
+		SMTPUsername:       getEnv("SMTP_USERNAME", ""),
+		SMTPPassword:       getEnv("SMTP_PASSWORD", ""),
+		SMTPFrom:           getEnv("SMTP_FROM", ""),
+		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
+		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/api/v1/auth/google/callback"),
 	}, nil
 }
 

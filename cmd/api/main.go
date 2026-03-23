@@ -37,6 +37,8 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 )
 
 func main() {
@@ -57,16 +59,26 @@ func main() {
 	// Initialize services
 	jwtService := pkg.NewJWTService(cfg.JWTSecret)
 	qrService := pkg.NewQRService(cfg.FrontendBaseURL)
+	emailService := pkg.NewEmailService(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUsername, cfg.SMTPPassword, cfg.SMTPFrom)
 
 	// Initialize WebSocket hub
 	hub := pkg.NewHub()
 	go hub.Run()
 	log.Println("✓ WebSocket hub started")
 
+	// Initialize Google OAuth config
+	googleOAuth := &oauth2.Config{
+		ClientID:     cfg.GoogleClientID,
+		ClientSecret: cfg.GoogleClientSecret,
+		RedirectURL:  cfg.GoogleRedirectURL,
+		Scopes:       []string{"https://www.googleapis.com/auth/userinfo.email"},
+		Endpoint:     google.Endpoint,
+	}
+
 	// Initialize Auth module
 	authRepository := authRepo.NewMongoRepository(db.Database)
-	authService := authUseCase.NewAuthUseCase(authRepository, jwtService)
-	authHdlr := authHandler.NewAuthHandler(authService)
+	authService := authUseCase.NewAuthUseCase(authRepository, jwtService, emailService, cfg.FrontendBaseURL, googleOAuth)
+	authHdlr := authHandler.NewAuthHandler(authService, cfg.JWTSecret, cfg.FrontendBaseURL)
 
 	// Initialize Restaurant module
 	restaurantRepository := restaurantRepo.NewMongoRepository(db.Database)

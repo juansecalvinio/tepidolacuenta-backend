@@ -75,6 +75,37 @@ func (r *mongoRepository) FindByID(ctx context.Context, id primitive.ObjectID) (
 	return &user, nil
 }
 
+func (r *mongoRepository) FindByGoogleID(ctx context.Context, googleID string) (*domain.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	var user domain.User
+	err := r.collection.FindOne(ctx, bson.M{"google_id": googleID}).Decode(&user)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, pkg.ErrUserNotFound
+		}
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+func (r *mongoRepository) LinkGoogleID(ctx context.Context, id primitive.ObjectID, googleID string) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	update := bson.M{
+		"$set": bson.M{
+			"google_id":  googleID,
+			"updated_at": time.Now(),
+		},
+	}
+
+	_, err := r.collection.UpdateOne(ctx, bson.M{"_id": id}, update)
+	return err
+}
+
 func (r *mongoRepository) Update(ctx context.Context, user *domain.User) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -97,5 +128,56 @@ func (r *mongoRepository) Delete(ctx context.Context, id primitive.ObjectID) err
 	defer cancel()
 
 	_, err := r.collection.DeleteOne(ctx, bson.M{"_id": id})
+	return err
+}
+
+func (r *mongoRepository) SaveResetToken(ctx context.Context, id primitive.ObjectID, token string, expiry time.Time) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	update := bson.M{
+		"$set": bson.M{
+			"reset_password_token":  token,
+			"reset_password_expiry": expiry,
+			"updated_at":            time.Now(),
+		},
+	}
+
+	_, err := r.collection.UpdateOne(ctx, bson.M{"_id": id}, update)
+	return err
+}
+
+func (r *mongoRepository) FindByResetToken(ctx context.Context, token string) (*domain.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	var user domain.User
+	err := r.collection.FindOne(ctx, bson.M{"reset_password_token": token}).Decode(&user)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, pkg.ErrUserNotFound
+		}
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+func (r *mongoRepository) UpdatePasswordAndClearToken(ctx context.Context, id primitive.ObjectID, hashedPassword string) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	update := bson.M{
+		"$set": bson.M{
+			"password":   hashedPassword,
+			"updated_at": time.Now(),
+		},
+		"$unset": bson.M{
+			"reset_password_token":  "",
+			"reset_password_expiry": "",
+		},
+	}
+
+	_, err := r.collection.UpdateOne(ctx, bson.M{"_id": id}, update)
 	return err
 }
