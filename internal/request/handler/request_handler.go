@@ -62,6 +62,10 @@ func (h *Handler) Create(c *gin.Context) {
 			pkg.NotFoundResponse(c, "Restaurant or table not found", err)
 			return
 		}
+		if errors.Is(err, pkg.ErrRequestAlreadyPending) {
+			pkg.ErrorResponse(c, http.StatusConflict, err.Error(), nil)
+			return
+		}
 		pkg.BadRequestResponse(c, "Failed to create request", err)
 		return
 	}

@@ -81,6 +81,18 @@ func (r *mongoRepository) FindPendingByRestaurantID(ctx context.Context, restaur
 	return requests, nil
 }
 
+func (r *mongoRepository) ExistsPendingForTable(ctx context.Context, tableID primitive.ObjectID) (bool, error) {
+	filter := bson.M{
+		"tableId": tableID,
+		"status":  domain.StatusPending,
+	}
+	count, err := r.collection.CountDocuments(ctx, filter)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
 func (r *mongoRepository) Update(ctx context.Context, request *domain.Request) error {
 	filter := bson.M{"_id": request.ID}
 	update := bson.M{"$set": request}

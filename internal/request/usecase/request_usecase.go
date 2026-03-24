@@ -109,8 +109,17 @@ func (uc *requestUseCase) Create(ctx context.Context, input domain.CreateRequest
 		return nil, errors.New("table is not active")
 	}
 
+	// Check for existing pending request on the same table
+	exists, err := uc.repo.ExistsPendingForTable(ctx, tableID)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, pkg.ErrRequestAlreadyPending
+	}
+
 	// Create request
-	request := domain.NewRequest(restaurantID, branchID, tableID, input.TableNumber)
+	request := domain.NewRequest(restaurantID, branchID, tableID, input.TableNumber, domain.PaymentMethod(input.PaymentMethod))
 
 	if err := uc.repo.Create(ctx, request); err != nil {
 		return nil, err

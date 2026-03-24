@@ -14,6 +14,7 @@ type Repository interface {
 	FindByID(ctx context.Context, id primitive.ObjectID) (*domain.Request, error)
 	FindByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID) ([]*domain.Request, error)
 	FindPendingByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID) ([]*domain.Request, error)
+	ExistsPendingForTable(ctx context.Context, tableID primitive.ObjectID) (bool, error)
 	Update(ctx context.Context, request *domain.Request) error
 	Delete(ctx context.Context, id primitive.ObjectID) error
 }

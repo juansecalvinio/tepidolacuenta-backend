@@ -15,25 +15,36 @@ const (
 	StatusCancelled RequestStatus = "cancelled"
 )
 
+// PaymentMethod represents the payment method chosen by the customer
+type PaymentMethod string
+
+const (
+	PaymentCash       PaymentMethod = "cash"
+	PaymentDebitCard  PaymentMethod = "debit_card"
+	PaymentCreditCard PaymentMethod = "credit_card"
+)
+
 // Request represents an account request from a table
 type Request struct {
-	ID           primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	RestaurantID primitive.ObjectID `bson:"restaurantId" json:"restaurantId"`
-	BranchID     primitive.ObjectID `bson:"branchId" json:"branchId"`
-	TableID      primitive.ObjectID `bson:"tableId" json:"tableId"`
-	TableNumber  int                `bson:"tableNumber" json:"tableNumber"`
-	Status       RequestStatus      `bson:"status" json:"status"`
-	CreatedAt    time.Time          `bson:"createdAt" json:"createdAt"`
-	UpdatedAt    time.Time          `bson:"updatedAt" json:"updatedAt"`
+	ID            primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	RestaurantID  primitive.ObjectID `bson:"restaurantId" json:"restaurantId"`
+	BranchID      primitive.ObjectID `bson:"branchId" json:"branchId"`
+	TableID       primitive.ObjectID `bson:"tableId" json:"tableId"`
+	TableNumber   int                `bson:"tableNumber" json:"tableNumber"`
+	PaymentMethod PaymentMethod      `bson:"paymentMethod" json:"paymentMethod"`
+	Status        RequestStatus      `bson:"status" json:"status"`
+	CreatedAt     time.Time          `bson:"createdAt" json:"createdAt"`
+	UpdatedAt     time.Time          `bson:"updatedAt" json:"updatedAt"`
 }
 
 // CreateRequestInput represents the input for creating a request
 type CreateRequestInput struct {
-	RestaurantID string `json:"restaurantId" binding:"required"`
-	BranchID     string `json:"branchId" binding:"required"`
-	TableID      string `json:"tableId" binding:"required"`
-	TableNumber  int    `json:"tableNumber" binding:"required,min=1"`
-	Hash         string `json:"hash" binding:"required"`
+	RestaurantID  string `json:"restaurantId" binding:"required"`
+	BranchID      string `json:"branchId" binding:"required"`
+	TableID       string `json:"tableId" binding:"required"`
+	TableNumber   int    `json:"tableNumber" binding:"required,min=1"`
+	Hash          string `json:"hash" binding:"required"`
+	PaymentMethod string `json:"paymentMethod" binding:"required,oneof=cash debit_card credit_card"`
 }
 
 // UpdateRequestStatusInput represents the input for updating request status
@@ -42,17 +53,18 @@ type UpdateRequestStatusInput struct {
 }
 
 // NewRequest creates a new request
-func NewRequest(restaurantID, branchID, tableID primitive.ObjectID, tableNumber int) *Request {
+func NewRequest(restaurantID, branchID, tableID primitive.ObjectID, tableNumber int, paymentMethod PaymentMethod) *Request {
 	now := time.Now()
 	return &Request{
-		ID:           primitive.NewObjectID(),
-		RestaurantID: restaurantID,
-		BranchID:     branchID,
-		TableID:      tableID,
-		TableNumber:  tableNumber,
-		Status:       StatusPending,
-		CreatedAt:    now,
-		UpdatedAt:    now,
+		ID:            primitive.NewObjectID(),
+		RestaurantID:  restaurantID,
+		BranchID:      branchID,
+		TableID:       tableID,
+		TableNumber:   tableNumber,
+		PaymentMethod: paymentMethod,
+		Status:        StatusPending,
+		CreatedAt:     now,
+		UpdatedAt:     now,
 	}
 }
 
