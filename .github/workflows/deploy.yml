@@ -49,6 +49,14 @@ jobs:
               -e MONGODB_DATABASE="${{ secrets.MONGODB_DATABASE }}" \
               -e FRONTEND_BASE_URL="${{ secrets.FRONTEND_BASE_URL }}" \
               -e CORS_ALLOWED_ORIGINS="${{ secrets.CORS_ALLOWED_ORIGINS }}" \
+              -e SMTP_HOST="${{ secrets.SMTP_HOST }}" \
+              -e SMTP_PORT="${{ secrets.SMTP_PORT }}" \
+              -e SMTP_USERNAME="${{ secrets.SMTP_USERNAME }}" \
+              -e SMTP_PASSWORD="${{ secrets.SMTP_PASSWORD }}" \
+              -e SMTP_FROM="${{ secrets.SMTP_FROM }}" \
+              -e GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
+              -e GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
+              -e GOOGLE_REDIRECT_URL="${{ secrets.GOOGLE_REDIRECT_URL }}" \
               --restart unless-stopped \
               ${{ secrets.DOCKER_USERNAME }}/tepidolacuenta-backend:latest
 
