@@ -2,10 +2,14 @@ package usecase
 
 import (
 	"context"
+	"log"
+	"time"
 
 	"juansecalvinio/tepidolacuenta/internal/pkg"
 	"juansecalvinio/tepidolacuenta/internal/restaurant/domain"
 	"juansecalvinio/tepidolacuenta/internal/restaurant/repository"
+	subscriptionDomain "juansecalvinio/tepidolacuenta/internal/subscription/domain"
+	subscriptionRepo "juansecalvinio/tepidolacuenta/internal/subscription/repository"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -20,27 +24,65 @@ type UseCase interface {
 }
 
 type restaurantUseCase struct {
-	repo repository.Repository
+	repo             repository.Repository
+	planRepo         subscriptionRepo.PlanRepository
+	subscriptionRepo subscriptionRepo.SubscriptionRepository
 }
 
 // NewRestaurantUseCase creates a new restaurant use case
-func NewRestaurantUseCase(repo repository.Repository) UseCase {
+func NewRestaurantUseCase(
+	repo repository.Repository,
+	planRepo subscriptionRepo.PlanRepository,
+	subscriptionRepo subscriptionRepo.SubscriptionRepository,
+) UseCase {
 	return &restaurantUseCase{
-		repo: repo,
+		repo:             repo,
+		planRepo:         planRepo,
+		subscriptionRepo: subscriptionRepo,
 	}
 }
 
-// Create creates a new restaurant
+// Create creates a new restaurant and automatically starts a trial subscription
 func (uc *restaurantUseCase) Create(ctx context.Context, userID primitive.ObjectID, input domain.CreateRestaurantInput) (*domain.Restaurant, error) {
-	// Create restaurant
 	restaurant := domain.NewRestaurant(userID, input.Name, input.CUIT)
 
-	// Save to database
 	if err := uc.repo.Create(ctx, restaurant); err != nil {
 		return nil, err
 	}
 
+	if err := uc.startTrial(ctx, userID, restaurant.ID); err != nil {
+		log.Printf("Warning: failed to start trial for restaurant %s: %v", restaurant.ID.Hex(), err)
+	}
+
 	return restaurant, nil
+}
+
+// startTrial creates a trialing subscription using the Inicial plan
+func (uc *restaurantUseCase) startTrial(ctx context.Context, userID, restaurantID primitive.ObjectID) error {
+	plans, err := uc.planRepo.FindAll(ctx)
+	if err != nil {
+		return err
+	}
+
+	var inicialPlan *subscriptionDomain.Plan
+	for _, p := range plans {
+		if p.Name == subscriptionDomain.PlanNameInicial {
+			inicialPlan = p
+			break
+		}
+	}
+	if inicialPlan == nil {
+		return pkg.ErrNotFound
+	}
+
+	subscription := subscriptionDomain.NewSubscription(userID, restaurantID, inicialPlan.ID, subscriptionDomain.SubscriptionStatusTrialing)
+
+	now := time.Now()
+	trialEnds := now.AddDate(0, 0, inicialPlan.TrialDays)
+	subscription.TrialStartedAt = &now
+	subscription.TrialEndsAt = &trialEnds
+
+	return uc.subscriptionRepo.Create(ctx, subscription)
 }
 
 // GetByID retrieves a restaurant by ID

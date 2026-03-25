@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"time"
@@ -31,8 +32,15 @@ import (
 	requestRepo "juansecalvinio/tepidolacuenta/internal/request/repository"
 	requestUseCase "juansecalvinio/tepidolacuenta/internal/request/usecase"
 
+	"juansecalvinio/tepidolacuenta/internal/migration"
+
 	setupHandler "juansecalvinio/tepidolacuenta/internal/setup/handler"
 	setupUseCase "juansecalvinio/tepidolacuenta/internal/setup/usecase"
+
+	subscriptionHandler "juansecalvinio/tepidolacuenta/internal/subscription/handler"
+	subscriptionRepo "juansecalvinio/tepidolacuenta/internal/subscription/repository"
+	subscriptionUseCase "juansecalvinio/tepidolacuenta/internal/subscription/usecase"
+	subscriptionDomain "juansecalvinio/tepidolacuenta/internal/subscription/domain"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -80,9 +88,13 @@ func main() {
 	authService := authUseCase.NewAuthUseCase(authRepository, jwtService, emailService, cfg.FrontendBaseURL, googleOAuth)
 	authHdlr := authHandler.NewAuthHandler(authService, cfg.JWTSecret, cfg.FrontendBaseURL)
 
+	// Initialize Subscription repositories early (needed by restaurant usecase)
+	planRepository := subscriptionRepo.NewMongoPlanRepository(db.Database)
+	subscriptionRepository := subscriptionRepo.NewMongoSubscriptionRepository(db.Database)
+
 	// Initialize Restaurant module
 	restaurantRepository := restaurantRepo.NewMongoRepository(db.Database)
-	restaurantService := restaurantUseCase.NewRestaurantUseCase(restaurantRepository)
+	restaurantService := restaurantUseCase.NewRestaurantUseCase(restaurantRepository, planRepository, subscriptionRepository)
 	restaurantHdlr := restaurantHandler.NewRestaurantHandler(restaurantService)
 
 	// Initialize Branch module
@@ -98,6 +110,21 @@ func main() {
 	// Initialize Setup module
 	setupService := setupUseCase.NewSetupUseCase(restaurantRepository, branchRepository, tableRepository, qrService)
 	setupHdlr := setupHandler.NewSetupHandler(setupService)
+
+	// Initialize Subscription module
+	subscriptionService := subscriptionUseCase.NewSubscriptionUseCase(planRepository, subscriptionRepository, restaurantRepository)
+	subscriptionHdlr := subscriptionHandler.NewSubscriptionHandler(subscriptionService)
+
+	// Seed plans on startup if collection is empty
+	if err := seedPlans(context.Background(), planRepository); err != nil {
+		log.Printf("Warning: failed to seed plans: %v", err)
+	}
+
+	// Run pending migrations
+	migrationRunner := migration.NewRunner(db.Database, migration.All())
+	if err := migrationRunner.Run(context.Background()); err != nil {
+		log.Fatalf("Failed to run migrations: %v", err)
+	}
 
 	// Initialize Request module
 	requestRepository := requestRepo.NewMongoRepository(db.Database)
@@ -169,6 +196,9 @@ func main() {
 			// Setup routes
 			setupHdlr.RegisterRoutes(protected)
 
+			// Subscription routes (both public and protected)
+			subscriptionHdlr.RegisterRoutes(protected, publicV1)
+
 			// Request routes (both public and protected)
 			requestHdlr.RegisterRoutes(protected, publicV1)
 		}
@@ -181,4 +211,28 @@ func main() {
 	if err := router.Run(":" + cfg.Port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
+}
+
+func seedPlans(ctx context.Context, repo subscriptionRepo.PlanRepository) error {
+	existing, err := repo.FindAll(ctx)
+	if err != nil {
+		return err
+	}
+	if len(existing) > 0 {
+		return nil
+	}
+
+	plans := []*subscriptionDomain.Plan{
+		subscriptionDomain.NewPlan(subscriptionDomain.PlanNameInicial, 49.99, 10, 1, 30),
+		subscriptionDomain.NewPlan(subscriptionDomain.PlanNameProfesional, 99.99, subscriptionDomain.Unlimited, subscriptionDomain.Unlimited, 30),
+	}
+
+	for _, plan := range plans {
+		if err := repo.Create(ctx, plan); err != nil {
+			return err
+		}
+		log.Printf("✓ Plan '%s' sembrado con ID: %s", plan.Name, plan.ID.Hex())
+	}
+
+	return nil
 }
