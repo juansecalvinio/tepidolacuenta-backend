@@ -122,12 +122,13 @@ func main() {
 	// Initialize Invitation module
 	invitationRepository := invitationRepo.NewMongoRepository(db.Database)
 	invitationService := invitationUseCase.NewInvitationUseCase(invitationRepository, restaurantRepository)
-	invitationHdlr := invitationHandler.NewInvitationHandler(invitationService)
 
 	// Initialize Auth module
 	authRepository := authRepo.NewMongoRepository(db.Database)
 	authService := authUseCase.NewAuthUseCase(authRepository, jwtService, emailService, cfg.FrontendBaseURL, googleOAuth, invitationService)
 	authHdlr := authHandler.NewAuthHandler(authService, cfg.JWTSecret, cfg.FrontendBaseURL)
+
+	invitationHdlr := invitationHandler.NewInvitationHandler(invitationService, authService)
 
 	// Initialize Branch module
 	branchRepository := branchRepo.NewMongoRepository(db.Database)

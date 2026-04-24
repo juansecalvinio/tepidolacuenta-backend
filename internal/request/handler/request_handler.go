@@ -15,6 +15,19 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// extractRestaurantIDHint parses the employee's restaurantID from context (nil for owners).
+func extractRestaurantIDHint(c *gin.Context) *primitive.ObjectID {
+	ridStr, ok := middleware.GetUserRestaurantID(c)
+	if !ok {
+		return nil
+	}
+	rid, err := primitive.ObjectIDFromHex(ridStr)
+	if err != nil {
+		return nil
+	}
+	return &rid
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -105,13 +118,13 @@ func (h *Handler) GetByID(c *gin.Context) {
 		return
 	}
 
-	request, err := h.useCase.GetByID(c.Request.Context(), requestID, userID)
+	request, err := h.useCase.GetByID(c.Request.Context(), requestID, userID, extractRestaurantIDHint(c))
 	if err != nil {
 		if errors.Is(err, pkg.ErrNotFound) {
 			pkg.NotFoundResponse(c, "Request not found", err)
 			return
 		}
-		if errors.Is(err, pkg.ErrUnauthorized) {
+		if errors.Is(err, pkg.ErrUnauthorized) || errors.Is(err, pkg.ErrForbidden) {
 			pkg.UnauthorizedResponse(c, "You don't have access to this request", err)
 			return
 		}
@@ -153,13 +166,13 @@ func (h *Handler) ListByRestaurant(c *gin.Context) {
 		return
 	}
 
-	requests, err := h.useCase.GetByRestaurantID(c.Request.Context(), restaurantID, userID)
+	requests, err := h.useCase.GetByRestaurantID(c.Request.Context(), restaurantID, userID, extractRestaurantIDHint(c))
 	if err != nil {
 		if errors.Is(err, pkg.ErrNotFound) {
 			pkg.NotFoundResponse(c, "Restaurant not found", err)
 			return
 		}
-		if errors.Is(err, pkg.ErrUnauthorized) {
+		if errors.Is(err, pkg.ErrUnauthorized) || errors.Is(err, pkg.ErrForbidden) {
 			pkg.UnauthorizedResponse(c, "You don't have access to this restaurant", err)
 			return
 		}
@@ -201,13 +214,13 @@ func (h *Handler) ListPendingByRestaurant(c *gin.Context) {
 		return
 	}
 
-	requests, err := h.useCase.GetPendingByRestaurantID(c.Request.Context(), restaurantID, userID)
+	requests, err := h.useCase.GetPendingByRestaurantID(c.Request.Context(), restaurantID, userID, extractRestaurantIDHint(c))
 	if err != nil {
 		if errors.Is(err, pkg.ErrNotFound) {
 			pkg.NotFoundResponse(c, "Restaurant not found", err)
 			return
 		}
-		if errors.Is(err, pkg.ErrUnauthorized) {
+		if errors.Is(err, pkg.ErrUnauthorized) || errors.Is(err, pkg.ErrForbidden) {
 			pkg.UnauthorizedResponse(c, "You don't have access to this restaurant", err)
 			return
 		}
@@ -258,13 +271,13 @@ func (h *Handler) UpdateStatus(c *gin.Context) {
 		return
 	}
 
-	request, err := h.useCase.UpdateStatus(c.Request.Context(), requestID, userID, input)
+	request, err := h.useCase.UpdateStatus(c.Request.Context(), requestID, userID, input, extractRestaurantIDHint(c))
 	if err != nil {
 		if errors.Is(err, pkg.ErrNotFound) {
 			pkg.NotFoundResponse(c, "Request not found", err)
 			return
 		}
-		if errors.Is(err, pkg.ErrUnauthorized) {
+		if errors.Is(err, pkg.ErrUnauthorized) || errors.Is(err, pkg.ErrForbidden) {
 			pkg.UnauthorizedResponse(c, "You don't have access to this request", err)
 			return
 		}

@@ -163,6 +163,22 @@ func (r *mongoRepository) FindByResetToken(ctx context.Context, token string) (*
 	return &user, nil
 }
 
+func (r *mongoRepository) UpdateRoleAndRestaurant(ctx context.Context, id primitive.ObjectID, role domain.Role, restaurantID primitive.ObjectID) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	update := bson.M{
+		"$set": bson.M{
+			"role":          role,
+			"restaurant_id": restaurantID,
+			"updated_at":    time.Now(),
+		},
+	}
+
+	_, err := r.collection.UpdateOne(ctx, bson.M{"_id": id}, update)
+	return err
+}
+
 func (r *mongoRepository) UpdatePasswordAndClearToken(ctx context.Context, id primitive.ObjectID, hashedPassword string) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()

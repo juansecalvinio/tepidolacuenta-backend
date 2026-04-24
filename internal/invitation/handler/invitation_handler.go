@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	authUseCase "juansecalvinio/tepidolacuenta/internal/auth/usecase"
 	invitationDomain "juansecalvinio/tepidolacuenta/internal/invitation/domain"
 	"juansecalvinio/tepidolacuenta/internal/invitation/usecase"
 	"juansecalvinio/tepidolacuenta/internal/middleware"
@@ -14,11 +15,12 @@ import (
 )
 
 type Handler struct {
-	useCase usecase.UseCase
+	useCase  usecase.UseCase
+	authCase authUseCase.UseCase
 }
 
-func NewInvitationHandler(uc usecase.UseCase) *Handler {
-	return &Handler{useCase: uc}
+func NewInvitationHandler(uc usecase.UseCase, authUC authUseCase.UseCase) *Handler {
+	return &Handler{useCase: uc, authCase: authUC}
 }
 
 // GenerateCode creates a new single-use invitation code for a restaurant.
@@ -64,11 +66,53 @@ func (h *Handler) GenerateCode(c *gin.Context) {
 	pkg.SuccessResponse(c, http.StatusCreated, "Invitation code generated", resp)
 }
 
-// RegisterRoutes attaches the owner-protected generate endpoint.
+// AcceptInvitation links an authenticated Google user to a restaurant as an employee.
+// POST /api/v1/invitations/accept
+func (h *Handler) AcceptInvitation(c *gin.Context) {
+	userIDStr, exists := middleware.GetUserID(c)
+	if !exists {
+		pkg.UnauthorizedResponse(c, "User not authenticated", pkg.ErrUnauthorized)
+		return
+	}
+	userID, err := primitive.ObjectIDFromHex(userIDStr)
+	if err != nil {
+		pkg.BadRequestResponse(c, "Invalid user ID", err)
+		return
+	}
+
+	var input invitationDomain.AcceptInvitationInput
+	if err := c.ShouldBindJSON(&input); err != nil {
+		pkg.BadRequestResponse(c, "Invalid input", err)
+		return
+	}
+
+	resp, err := h.authCase.AcceptInvitation(c.Request.Context(), userID, input.Code)
+	if err != nil {
+		if errors.Is(err, pkg.ErrInvalidToken) || errors.Is(err, pkg.ErrResetTokenExpired) {
+			pkg.BadRequestResponse(c, "Invalid or expired invitation code", err)
+			return
+		}
+		if errors.Is(err, pkg.ErrUserNotFound) {
+			pkg.NotFoundResponse(c, "User not found", err)
+			return
+		}
+		pkg.InternalServerErrorResponse(c, "Failed to accept invitation", err)
+		return
+	}
+
+	pkg.SuccessResponse(c, http.StatusOK, "Invitation accepted", resp)
+}
+
+// RegisterRoutes attaches invitation endpoints to the protected router.
 func (h *Handler) RegisterRoutes(protected *gin.RouterGroup) {
 	invitations := protected.Group("/invitations")
-	invitations.Use(middleware.OwnerOnly())
 	{
-		invitations.POST("/generate", h.GenerateCode)
+		invitations.POST("/accept", h.AcceptInvitation)
+	}
+
+	ownerInvitations := invitations.Group("")
+	ownerInvitations.Use(middleware.OwnerOnly())
+	{
+		ownerInvitations.POST("/generate", h.GenerateCode)
 	}
 }

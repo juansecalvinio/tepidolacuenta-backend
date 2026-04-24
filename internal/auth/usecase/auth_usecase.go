@@ -19,6 +19,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/oauth2"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // UseCase defines the interface for authentication use cases
@@ -30,6 +31,7 @@ type UseCase interface {
 	ResetPassword(ctx context.Context, input domain.ResetPasswordInput) error
 	GoogleAuthURL(state string) string
 	HandleGoogleCallback(ctx context.Context, code string) (*domain.LoginResponse, error)
+	AcceptInvitation(ctx context.Context, userID primitive.ObjectID, code string) (*domain.LoginResponse, error)
 }
 
 type authUseCase struct {
@@ -291,6 +293,30 @@ func fetchGoogleUserInfo(ctx context.Context, cfg *oauth2.Config, token *oauth2.
 	}
 
 	return &info, nil
+}
+
+// AcceptInvitation links an already-authenticated Google user to a restaurant as an employee.
+func (uc *authUseCase) AcceptInvitation(ctx context.Context, userID primitive.ObjectID, code string) (*domain.LoginResponse, error) {
+	inv, err := uc.invitationUC.Redeem(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := uc.repo.UpdateRoleAndRestaurant(ctx, userID, domain.RoleEmployee, inv.RestaurantID); err != nil {
+		return nil, err
+	}
+
+	user, err := uc.repo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	token, err := uc.jwtService.GenerateToken(user.ID, user.Email, string(domain.RoleEmployee), inv.RestaurantID.Hex())
+	if err != nil {
+		return nil, err
+	}
+
+	return &domain.LoginResponse{Token: token, User: *user}, nil
 }
 
 func generateResetToken() (string, error) {

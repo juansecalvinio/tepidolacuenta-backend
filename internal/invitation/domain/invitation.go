@@ -19,6 +19,10 @@ type GenerateInvitationInput struct {
 	RestaurantID string `json:"restaurantId" binding:"required"`
 }
 
+type AcceptInvitationInput struct {
+	Code string `json:"code" binding:"required"`
+}
+
 type GenerateInvitationResponse struct {
 	Code      string    `json:"code"`
 	ExpiresAt time.Time `json:"expiresAt"`

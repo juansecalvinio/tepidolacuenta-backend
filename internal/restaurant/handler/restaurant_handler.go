@@ -103,13 +103,13 @@ func (h *Handler) GetByID(c *gin.Context) {
 		return
 	}
 
-	restaurant, err := h.useCase.GetByID(c.Request.Context(), restaurantID, userID)
+	restaurant, err := h.useCase.GetByID(c.Request.Context(), restaurantID, userID, extractRestaurantIDHint(c))
 	if err != nil {
 		if errors.Is(err, pkg.ErrNotFound) {
 			pkg.NotFoundResponse(c, "Restaurant not found", err)
 			return
 		}
-		if errors.Is(err, pkg.ErrUnauthorized) {
+		if errors.Is(err, pkg.ErrUnauthorized) || errors.Is(err, pkg.ErrForbidden) {
 			pkg.UnauthorizedResponse(c, "You don't have access to this restaurant", err)
 			return
 		}
@@ -259,6 +259,19 @@ func (h *Handler) Delete(c *gin.Context) {
 	}
 
 	pkg.SuccessResponse(c, http.StatusOK, "Restaurant deleted successfully", nil)
+}
+
+// extractRestaurantIDHint parses the employee's restaurantID from context (nil for owners).
+func extractRestaurantIDHint(c *gin.Context) *primitive.ObjectID {
+	ridStr, ok := middleware.GetUserRestaurantID(c)
+	if !ok {
+		return nil
+	}
+	rid, err := primitive.ObjectIDFromHex(ridStr)
+	if err != nil {
+		return nil
+	}
+	return &rid
 }
 
 // RegisterRoutes registers all restaurant routes
