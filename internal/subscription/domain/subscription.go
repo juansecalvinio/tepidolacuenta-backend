@@ -17,7 +17,8 @@ const (
 
 // Plan names
 const (
-	PlanNameInicial     = "Inicial"
+	PlanNameBasico      = "Básico"
+	PlanNameIntermedio  = "Intermedio"
 	PlanNameProfesional = "Profesional"
 )
 
@@ -77,6 +78,21 @@ func NewPlan(name string, price float64, maxTables, maxBranches, trialDays int) 
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
+}
+
+// SubscriptionWithPlan represents a subscription with its associated plan embedded
+type SubscriptionWithPlan struct {
+	ID                    primitive.ObjectID `json:"id"`
+	UserID                primitive.ObjectID `json:"userId"`
+	RestaurantID          primitive.ObjectID `json:"restaurantId"`
+	PlanID                primitive.ObjectID `json:"planId"`
+	Plan                  *Plan              `json:"plan"`
+	Status                string             `json:"status"`
+	TrialStartedAt        *time.Time         `json:"trialStartedAt,omitempty"`
+	TrialEndsAt           *time.Time         `json:"trialEndsAt,omitempty"`
+	PaymentSubscriptionID string             `json:"paymentSubscriptionId,omitempty"`
+	CreatedAt             time.Time          `json:"createdAt"`
+	UpdatedAt             time.Time          `json:"updatedAt"`
 }
 
 // NewSubscription creates a new subscription with the current timestamp

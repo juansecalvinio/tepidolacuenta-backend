@@ -178,11 +178,46 @@ func (h *Handler) GoogleCallback(c *gin.Context) {
 	c.Redirect(http.StatusTemporaryRedirect, h.frontendBaseURL+"/auth/callback?token="+loginResponse.Token)
 }
 
+// RegisterEmployee handles employee registration via invitation code
+func (h *Handler) RegisterEmployee(c *gin.Context) {
+	var input domain.EmployeeRegisterInput
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		pkg.BadRequestResponse(c, "Invalid input", err)
+		return
+	}
+
+	loginResponse, err := h.useCase.RegisterEmployee(c.Request.Context(), input)
+	if err != nil {
+		if errors.Is(err, pkg.ErrInvalidToken) {
+			pkg.BadRequestResponse(c, "Invalid or expired invitation code", err)
+			return
+		}
+		if errors.Is(err, pkg.ErrResetTokenExpired) {
+			pkg.BadRequestResponse(c, "Invitation code has expired", err)
+			return
+		}
+		if errors.Is(err, pkg.ErrUserAlreadyExists) {
+			pkg.BadRequestResponse(c, "User with this email already exists", err)
+			return
+		}
+		if errors.Is(err, pkg.ErrInvalidInput) {
+			pkg.BadRequestResponse(c, "Invalid input data", err)
+			return
+		}
+		pkg.InternalServerErrorResponse(c, "Failed to register employee", err)
+		return
+	}
+
+	pkg.SuccessResponse(c, http.StatusCreated, "Employee registered successfully", loginResponse)
+}
+
 // RegisterRoutes registers all auth routes
 func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	auth := router.Group("/auth")
 	{
 		auth.POST("/register", h.Register)
+		auth.POST("/register/employee", h.RegisterEmployee)
 		auth.POST("/login", h.Login)
 		auth.POST("/forgot-password", h.ForgotPassword)
 		auth.POST("/reset-password", h.ResetPassword)

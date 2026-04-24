@@ -57,28 +57,28 @@ func (uc *restaurantUseCase) Create(ctx context.Context, userID primitive.Object
 	return restaurant, nil
 }
 
-// startTrial creates a trialing subscription using the Inicial plan
+// startTrial creates a trialing subscription using the Basic plan
 func (uc *restaurantUseCase) startTrial(ctx context.Context, userID, restaurantID primitive.ObjectID) error {
 	plans, err := uc.planRepo.FindAll(ctx)
 	if err != nil {
 		return err
 	}
 
-	var inicialPlan *subscriptionDomain.Plan
+	var basicPlan *subscriptionDomain.Plan
 	for _, p := range plans {
-		if p.Name == subscriptionDomain.PlanNameInicial {
-			inicialPlan = p
+		if p.Name == subscriptionDomain.PlanNameBasico {
+			basicPlan = p
 			break
 		}
 	}
-	if inicialPlan == nil {
+	if basicPlan == nil {
 		return pkg.ErrNotFound
 	}
 
-	subscription := subscriptionDomain.NewSubscription(userID, restaurantID, inicialPlan.ID, subscriptionDomain.SubscriptionStatusTrialing)
+	subscription := subscriptionDomain.NewSubscription(userID, restaurantID, basicPlan.ID, subscriptionDomain.SubscriptionStatusTrialing)
 
 	now := time.Now()
-	trialEnds := now.AddDate(0, 0, inicialPlan.TrialDays)
+	trialEnds := now.AddDate(0, 0, basicPlan.TrialDays)
 	subscription.TrialStartedAt = &now
 	subscription.TrialEndsAt = &trialEnds
 

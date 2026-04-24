@@ -6,9 +6,9 @@ import (
 	"time"
 
 	"juansecalvinio/tepidolacuenta/internal/pkg"
+	restaurantRepo "juansecalvinio/tepidolacuenta/internal/restaurant/repository"
 	"juansecalvinio/tepidolacuenta/internal/subscription/domain"
 	"juansecalvinio/tepidolacuenta/internal/subscription/repository"
-	restaurantRepo "juansecalvinio/tepidolacuenta/internal/restaurant/repository"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -21,9 +21,9 @@ type UseCase interface {
 
 	// Subscription operations
 	Create(ctx context.Context, userID primitive.ObjectID, input domain.CreateSubscriptionInput) (*domain.Subscription, error)
-	GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) (*domain.Subscription, error)
+	GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) (*domain.SubscriptionWithPlan, error)
 	GetByUserID(ctx context.Context, userID primitive.ObjectID) ([]*domain.Subscription, error)
-	GetByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID) (*domain.Subscription, error)
+	GetByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID) (*domain.SubscriptionWithPlan, error)
 	Update(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, input domain.UpdateSubscriptionInput) (*domain.Subscription, error)
 	Cancel(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) error
 }
@@ -120,8 +120,8 @@ func (uc *subscriptionUseCase) Create(ctx context.Context, userID primitive.Obje
 	return subscription, nil
 }
 
-// GetByID retrieves a subscription by ID
-func (uc *subscriptionUseCase) GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) (*domain.Subscription, error) {
+// GetByID retrieves a subscription by ID with its associated plan embedded
+func (uc *subscriptionUseCase) GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) (*domain.SubscriptionWithPlan, error) {
 	subscription, err := uc.subscriptionRepo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -131,7 +131,24 @@ func (uc *subscriptionUseCase) GetByID(ctx context.Context, id primitive.ObjectI
 		return nil, pkg.ErrUnauthorized
 	}
 
-	return subscription, nil
+	plan, err := uc.planRepo.FindByID(ctx, subscription.PlanID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &domain.SubscriptionWithPlan{
+		ID:                    subscription.ID,
+		UserID:                subscription.UserID,
+		RestaurantID:          subscription.RestaurantID,
+		PlanID:                subscription.PlanID,
+		Plan:                  plan,
+		Status:                subscription.Status,
+		TrialStartedAt:        subscription.TrialStartedAt,
+		TrialEndsAt:           subscription.TrialEndsAt,
+		PaymentSubscriptionID: subscription.PaymentSubscriptionID,
+		CreatedAt:             subscription.CreatedAt,
+		UpdatedAt:             subscription.UpdatedAt,
+	}, nil
 }
 
 // GetByUserID retrieves all subscriptions for a user
@@ -140,7 +157,7 @@ func (uc *subscriptionUseCase) GetByUserID(ctx context.Context, userID primitive
 }
 
 // GetByRestaurantID retrieves the active subscription for a restaurant
-func (uc *subscriptionUseCase) GetByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID) (*domain.Subscription, error) {
+func (uc *subscriptionUseCase) GetByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID) (*domain.SubscriptionWithPlan, error) {
 	// Verify restaurant exists and belongs to user
 	restaurant, err := uc.restaurantRepo.FindByID(ctx, restaurantID)
 	if err != nil {
@@ -151,7 +168,29 @@ func (uc *subscriptionUseCase) GetByRestaurantID(ctx context.Context, restaurant
 		return nil, pkg.ErrUnauthorized
 	}
 
-	return uc.subscriptionRepo.FindByRestaurantID(ctx, restaurantID)
+	subscription, err := uc.subscriptionRepo.FindByRestaurantID(ctx, restaurantID)
+	if err != nil {
+		return nil, err
+	}
+
+	plan, err := uc.planRepo.FindByID(ctx, subscription.PlanID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &domain.SubscriptionWithPlan{
+		ID:                    subscription.ID,
+		UserID:                subscription.UserID,
+		RestaurantID:          subscription.RestaurantID,
+		PlanID:                subscription.PlanID,
+		Plan:                  plan,
+		Status:                subscription.Status,
+		TrialStartedAt:        subscription.TrialStartedAt,
+		TrialEndsAt:           subscription.TrialEndsAt,
+		PaymentSubscriptionID: subscription.PaymentSubscriptionID,
+		CreatedAt:             subscription.CreatedAt,
+		UpdatedAt:             subscription.UpdatedAt,
+	}, nil
 }
 
 // Update updates a subscription's plan, status, or payment details

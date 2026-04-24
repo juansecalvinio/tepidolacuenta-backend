@@ -14,4 +14,6 @@ var (
 	ErrInternalServer          = errors.New("internal server error")
 	ErrRequestAlreadyPending     = errors.New("there is already a pending request for this table")
 	ErrSubscriptionAlreadyExists = errors.New("restaurant already has an active subscription")
+	ErrPlanLimitReached          = errors.New("plan limit reached")
+	ErrForbidden                 = errors.New("forbidden")
 )

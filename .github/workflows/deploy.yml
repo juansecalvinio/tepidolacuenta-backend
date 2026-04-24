@@ -57,6 +57,7 @@ jobs:
               -e GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID }}" \
               -e GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET }}" \
               -e GOOGLE_REDIRECT_URL="${{ secrets.GOOGLE_REDIRECT_URL }}" \
+              -e SENTRY_DSN="${{ secrets.SENTRY_DSN }}" \
               --restart unless-stopped \
               ${{ secrets.DOCKER_USERNAME }}/tepidolacuenta-backend:latest
 

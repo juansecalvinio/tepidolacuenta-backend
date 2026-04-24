@@ -19,9 +19,13 @@ type Config struct {
 	SMTPUsername         string
 	SMTPPassword         string
 	SMTPFrom             string
-	GoogleClientID       string
-	GoogleClientSecret   string
-	GoogleRedirectURL    string
+	GoogleClientID              string
+	GoogleClientSecret          string
+	GoogleRedirectURL           string
+	SentryDSN                   string
+	MercadoPagoAccessToken      string
+	MercadoPagoWebhookSecret    string
+	MercadoPagoNotificationURL  string
 }
 
 func Load() (*Config, error) {
@@ -47,9 +51,13 @@ func Load() (*Config, error) {
 		SMTPUsername:       getEnv("SMTP_USERNAME", ""),
 		SMTPPassword:       getEnv("SMTP_PASSWORD", ""),
 		SMTPFrom:           getEnv("SMTP_FROM", ""),
-		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
-		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
-		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/api/v1/auth/google/callback"),
+		GoogleClientID:             getEnv("GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret:         getEnv("GOOGLE_CLIENT_SECRET", ""),
+		GoogleRedirectURL:          getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/api/v1/auth/google/callback"),
+		SentryDSN:                  getEnv("SENTRY_DSN", ""),
+		MercadoPagoAccessToken:     getEnv("MERCADOPAGO_ACCESS_TOKEN", ""),
+		MercadoPagoWebhookSecret:   getEnv("MERCADOPAGO_WEBHOOK_SECRET", ""),
+		MercadoPagoNotificationURL: getEnv("MERCADOPAGO_NOTIFICATION_URL", ""),
 	}, nil
 }
 
