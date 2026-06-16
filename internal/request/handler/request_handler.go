@@ -86,6 +86,39 @@ func (h *Handler) Create(c *gin.Context) {
 	pkg.SuccessResponse(c, http.StatusCreated, "Request created successfully", request)
 }
 
+// GetVenueInfo handles retrieving public venue info from a scanned QR
+// @Summary Get public venue info for a table QR
+// @Tags requests
+// @Produce json
+// @Param r query string true "Restaurant ID"
+// @Param b query string true "Branch ID"
+// @Param t query string true "Table ID"
+// @Param n query int true "Table number"
+// @Param h query string true "QR hash"
+// @Success 200 {object} pkg.Response{data=domain.VenueInfo}
+// @Failure 400 {object} pkg.Response
+// @Failure 404 {object} pkg.Response
+// @Router /api/v1/public/venue-info [get]
+func (h *Handler) GetVenueInfo(c *gin.Context) {
+	var input domain.VenueInfoInput
+	if err := c.ShouldBindQuery(&input); err != nil {
+		pkg.BadRequestResponse(c, "Invalid input", err)
+		return
+	}
+
+	info, err := h.useCase.GetVenueInfo(c.Request.Context(), input)
+	if err != nil {
+		if errors.Is(err, pkg.ErrNotFound) {
+			pkg.NotFoundResponse(c, "Restaurant or branch not found", err)
+			return
+		}
+		pkg.BadRequestResponse(c, "Failed to get venue info", err)
+		return
+	}
+
+	pkg.SuccessResponse(c, http.StatusOK, "Venue info retrieved successfully", info)
+}
+
 // GetByID handles retrieving a request by ID
 // @Summary Get request by ID
 // @Tags requests
@@ -392,6 +425,7 @@ func (h *Handler) WebSocket(c *gin.Context) {
 func (h *Handler) RegisterRoutes(router *gin.RouterGroup, publicRouter *gin.RouterGroup) {
 	// Public routes (no authentication required)
 	publicRouter.POST("/request-account", h.Create)
+	publicRouter.GET("/venue-info", h.GetVenueInfo)
 
 	// Protected routes (authentication required)
 	requests := router.Group("/requests")

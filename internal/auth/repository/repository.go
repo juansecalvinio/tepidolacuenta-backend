@@ -22,4 +22,6 @@ type Repository interface {
 	FindByResetToken(ctx context.Context, token string) (*domain.User, error)
 	UpdatePasswordAndClearToken(ctx context.Context, id primitive.ObjectID, hashedPassword string) error
 	UpdateRoleAndRestaurant(ctx context.Context, id primitive.ObjectID, role domain.Role, restaurantID primitive.ObjectID) error
+	FindEmployeesByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID) ([]*domain.User, error)
+	UnlinkFromRestaurant(ctx context.Context, id primitive.ObjectID) error
 }

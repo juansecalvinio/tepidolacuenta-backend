@@ -17,6 +17,7 @@ import (
 // UseCase defines the interface for request use cases
 type UseCase interface {
 	Create(ctx context.Context, input domain.CreateRequestInput) (*domain.Request, error)
+	GetVenueInfo(ctx context.Context, input domain.VenueInfoInput) (*domain.VenueInfo, error)
 	GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID) (*domain.Request, error)
 	GetByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID) ([]*domain.Request, error)
 	GetPendingByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID) ([]*domain.Request, error)
@@ -146,6 +147,50 @@ func (uc *requestUseCase) Create(ctx context.Context, input domain.CreateRequest
 	}
 
 	return request, nil
+}
+
+// GetVenueInfo returns the public restaurant/branch/table info for a scanned QR.
+// Validates the QR hash so venue names can't be enumerated by guessing IDs.
+func (uc *requestUseCase) GetVenueInfo(ctx context.Context, input domain.VenueInfoInput) (*domain.VenueInfo, error) {
+	restaurantID, err := primitive.ObjectIDFromHex(input.RestaurantID)
+	if err != nil {
+		return nil, errors.New("invalid restaurant ID")
+	}
+
+	branchID, err := primitive.ObjectIDFromHex(input.BranchID)
+	if err != nil {
+		return nil, errors.New("invalid branch ID")
+	}
+
+	tableID, err := primitive.ObjectIDFromHex(input.TableID)
+	if err != nil {
+		return nil, errors.New("invalid table ID")
+	}
+
+	// Validate QR code
+	if !uc.qrService.ValidateTableQRCode(restaurantID, branchID, tableID, input.TableNumber, input.Hash) {
+		return nil, errors.New("invalid QR code")
+	}
+
+	restaurant, err := uc.restaurantRepo.FindByID(ctx, restaurantID)
+	if err != nil {
+		return nil, err
+	}
+
+	branch, err := uc.branchRepo.FindByID(ctx, branchID)
+	if err != nil {
+		return nil, err
+	}
+
+	if branch.RestaurantID != restaurantID {
+		return nil, errors.New("branch does not belong to restaurant")
+	}
+
+	return &domain.VenueInfo{
+		RestaurantName: restaurant.Name,
+		BranchAddress:  branch.Address,
+		TableNumber:    input.TableNumber,
+	}, nil
 }
 
 // GetByID retrieves a request by ID

@@ -16,6 +16,7 @@ import (
 	"juansecalvinio/tepidolacuenta/internal/auth/repository"
 	invitationUseCase "juansecalvinio/tepidolacuenta/internal/invitation/usecase"
 	"juansecalvinio/tepidolacuenta/internal/pkg"
+	restaurantRepo "juansecalvinio/tepidolacuenta/internal/restaurant/repository"
 
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/oauth2"
@@ -32,10 +33,13 @@ type UseCase interface {
 	GoogleAuthURL(state string) string
 	HandleGoogleCallback(ctx context.Context, code string) (*domain.LoginResponse, error)
 	AcceptInvitation(ctx context.Context, userID primitive.ObjectID, code string) (*domain.LoginResponse, error)
+	ListEmployees(ctx context.Context, ownerUserID, restaurantID primitive.ObjectID) ([]*domain.User, error)
+	RevokeEmployee(ctx context.Context, ownerUserID, restaurantID, employeeID primitive.ObjectID) error
 }
 
 type authUseCase struct {
 	repo            repository.Repository
+	restaurantRepo  restaurantRepo.Repository
 	jwtService      *pkg.JWTService
 	emailService    *pkg.EmailService
 	frontendBaseURL string
@@ -44,9 +48,10 @@ type authUseCase struct {
 }
 
 // NewAuthUseCase creates a new authentication use case
-func NewAuthUseCase(repo repository.Repository, jwtService *pkg.JWTService, emailService *pkg.EmailService, frontendBaseURL string, googleOAuth *oauth2.Config, invitationUC invitationUseCase.UseCase) UseCase {
+func NewAuthUseCase(repo repository.Repository, restaurantRepository restaurantRepo.Repository, jwtService *pkg.JWTService, emailService *pkg.EmailService, frontendBaseURL string, googleOAuth *oauth2.Config, invitationUC invitationUseCase.UseCase) UseCase {
 	return &authUseCase{
 		repo:            repo,
+		restaurantRepo:  restaurantRepository,
 		jwtService:      jwtService,
 		emailService:    emailService,
 		frontendBaseURL: frontendBaseURL,
@@ -325,4 +330,45 @@ func generateResetToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(bytes), nil
+}
+
+// assertOwnsRestaurant verifies the caller owns the given restaurant.
+func (uc *authUseCase) assertOwnsRestaurant(ctx context.Context, ownerUserID, restaurantID primitive.ObjectID) error {
+	restaurant, err := uc.restaurantRepo.FindByID(ctx, restaurantID)
+	if err != nil {
+		return err
+	}
+	if restaurant.UserID != ownerUserID {
+		return pkg.ErrForbidden
+	}
+	return nil
+}
+
+// ListEmployees returns the employees linked to the owner's restaurant.
+func (uc *authUseCase) ListEmployees(ctx context.Context, ownerUserID, restaurantID primitive.ObjectID) ([]*domain.User, error) {
+	if err := uc.assertOwnsRestaurant(ctx, ownerUserID, restaurantID); err != nil {
+		return nil, err
+	}
+	return uc.repo.FindEmployeesByRestaurantID(ctx, restaurantID)
+}
+
+// RevokeEmployee unlinks an employee from the owner's restaurant (keeps the account).
+func (uc *authUseCase) RevokeEmployee(ctx context.Context, ownerUserID, restaurantID, employeeID primitive.ObjectID) error {
+	if err := uc.assertOwnsRestaurant(ctx, ownerUserID, restaurantID); err != nil {
+		return err
+	}
+
+	employee, err := uc.repo.FindByID(ctx, employeeID)
+	if err != nil {
+		return err
+	}
+
+	// El empleado debe pertenecer a este local (evita revocar ajenos).
+	if employee.Role != domain.RoleEmployee ||
+		employee.RestaurantID == nil ||
+		*employee.RestaurantID != restaurantID {
+		return pkg.ErrForbidden
+	}
+
+	return uc.repo.UnlinkFromRestaurant(ctx, employeeID)
 }

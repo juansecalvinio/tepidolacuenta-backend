@@ -179,6 +179,41 @@ func (r *mongoRepository) UpdateRoleAndRestaurant(ctx context.Context, id primit
 	return err
 }
 
+// FindEmployeesByRestaurantID returns the employees linked to a restaurant.
+func (r *mongoRepository) FindEmployeesByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID) ([]*domain.User, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	cursor, err := r.collection.Find(ctx, bson.M{
+		"restaurant_id": restaurantID,
+		"role":          domain.RoleEmployee,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var users []*domain.User
+	if err := cursor.All(ctx, &users); err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
+// UnlinkFromRestaurant removes the restaurant link from a user (revoke access).
+func (r *mongoRepository) UnlinkFromRestaurant(ctx context.Context, id primitive.ObjectID) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	update := bson.M{
+		"$unset": bson.M{"restaurant_id": ""},
+		"$set":   bson.M{"updated_at": time.Now()},
+	}
+
+	_, err := r.collection.UpdateOne(ctx, bson.M{"_id": id}, update)
+	return err
+}
+
 func (r *mongoRepository) UpdatePasswordAndClearToken(ctx context.Context, id primitive.ObjectID, hashedPassword string) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()

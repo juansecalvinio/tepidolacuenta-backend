@@ -125,7 +125,7 @@ func main() {
 
 	// Initialize Auth module
 	authRepository := authRepo.NewMongoRepository(db.Database)
-	authService := authUseCase.NewAuthUseCase(authRepository, jwtService, emailService, cfg.FrontendBaseURL, googleOAuth, invitationService)
+	authService := authUseCase.NewAuthUseCase(authRepository, restaurantRepository, jwtService, emailService, cfg.FrontendBaseURL, googleOAuth, invitationService)
 	authHdlr := authHandler.NewAuthHandler(authService, cfg.JWTSecret, cfg.FrontendBaseURL)
 
 	invitationHdlr := invitationHandler.NewInvitationHandler(invitationService, authService)
@@ -260,6 +260,9 @@ func main() {
 
 			// Invitation routes
 			invitationHdlr.RegisterRoutes(protected)
+
+			// Team management routes (owner-only)
+			authHdlr.RegisterTeamRoutes(protected)
 		}
 
 		// WebSocket route (no authentication middleware, but validates token in handler)

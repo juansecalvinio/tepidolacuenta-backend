@@ -12,9 +12,11 @@ import (
 
 	"juansecalvinio/tepidolacuenta/internal/auth/domain"
 	"juansecalvinio/tepidolacuenta/internal/auth/usecase"
+	"juansecalvinio/tepidolacuenta/internal/middleware"
 	"juansecalvinio/tepidolacuenta/internal/pkg"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type Handler struct {
@@ -223,6 +225,110 @@ func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 		auth.POST("/reset-password", h.ResetPassword)
 		auth.GET("/google", h.GoogleRedirect)
 		auth.GET("/google/callback", h.GoogleCallback)
+	}
+}
+
+// RegisterTeamRoutes registers owner-only team management endpoints.
+func (h *Handler) RegisterTeamRoutes(router *gin.RouterGroup) {
+	team := router.Group("/team", middleware.OwnerOnly())
+	{
+		team.GET("/:restaurantId/employees", h.ListEmployees)
+		team.DELETE("/:restaurantId/employees/:employeeId", h.RevokeEmployee)
+	}
+}
+
+// ListEmployees handles listing the employees of the owner's restaurant
+// @Summary List restaurant employees
+// @Tags team
+// @Produce json
+// @Security BearerAuth
+// @Param restaurantId path string true "Restaurant ID"
+// @Success 200 {object} pkg.Response{data=[]domain.User}
+// @Failure 401 {object} pkg.Response
+// @Failure 403 {object} pkg.Response
+// @Router /api/v1/team/{restaurantId}/employees [get]
+func (h *Handler) ListEmployees(c *gin.Context) {
+	ownerID, ok := ownerIDFromContext(c)
+	if !ok {
+		return
+	}
+
+	restaurantID, err := primitive.ObjectIDFromHex(c.Param("restaurantId"))
+	if err != nil {
+		pkg.BadRequestResponse(c, "Invalid restaurant ID", err)
+		return
+	}
+
+	employees, err := h.useCase.ListEmployees(c.Request.Context(), ownerID, restaurantID)
+	if err != nil {
+		writeTeamError(c, err)
+		return
+	}
+
+	pkg.SuccessResponse(c, http.StatusOK, "Employees retrieved successfully", employees)
+}
+
+// RevokeEmployee handles unlinking an employee from the owner's restaurant
+// @Summary Revoke an employee's access
+// @Tags team
+// @Produce json
+// @Security BearerAuth
+// @Param restaurantId path string true "Restaurant ID"
+// @Param employeeId path string true "Employee ID"
+// @Success 200 {object} pkg.Response
+// @Failure 401 {object} pkg.Response
+// @Failure 403 {object} pkg.Response
+// @Router /api/v1/team/{restaurantId}/employees/{employeeId} [delete]
+func (h *Handler) RevokeEmployee(c *gin.Context) {
+	ownerID, ok := ownerIDFromContext(c)
+	if !ok {
+		return
+	}
+
+	restaurantID, err := primitive.ObjectIDFromHex(c.Param("restaurantId"))
+	if err != nil {
+		pkg.BadRequestResponse(c, "Invalid restaurant ID", err)
+		return
+	}
+
+	employeeID, err := primitive.ObjectIDFromHex(c.Param("employeeId"))
+	if err != nil {
+		pkg.BadRequestResponse(c, "Invalid employee ID", err)
+		return
+	}
+
+	if err := h.useCase.RevokeEmployee(c.Request.Context(), ownerID, restaurantID, employeeID); err != nil {
+		writeTeamError(c, err)
+		return
+	}
+
+	pkg.SuccessResponse(c, http.StatusOK, "Employee access revoked", nil)
+}
+
+// ownerIDFromContext extracts the authenticated user's ID, writing an error if absent.
+func ownerIDFromContext(c *gin.Context) (primitive.ObjectID, bool) {
+	userIDStr, exists := middleware.GetUserID(c)
+	if !exists {
+		pkg.UnauthorizedResponse(c, "User not authenticated", pkg.ErrUnauthorized)
+		return primitive.NilObjectID, false
+	}
+	userID, err := primitive.ObjectIDFromHex(userIDStr)
+	if err != nil {
+		pkg.BadRequestResponse(c, "Invalid user ID", err)
+		return primitive.NilObjectID, false
+	}
+	return userID, true
+}
+
+// writeTeamError maps team use-case errors to HTTP responses.
+func writeTeamError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, pkg.ErrNotFound) || errors.Is(err, pkg.ErrUserNotFound):
+		pkg.NotFoundResponse(c, "Resource not found", err)
+	case errors.Is(err, pkg.ErrForbidden) || errors.Is(err, pkg.ErrUnauthorized):
+		pkg.ForbiddenResponse(c, "You don't have access to this resource", err)
+	default:
+		pkg.InternalServerErrorResponse(c, "Operation failed", err)
 	}
 }
 
