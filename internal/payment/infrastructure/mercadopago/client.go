@@ -77,6 +77,14 @@ func (c *Client) CreatePreference(ctx context.Context, req PreferenceRequest) (*
 		ExternalReference: req.ExternalReference,
 	}
 
+	// MercadoPago solo permite auto_return con back_urls públicas: si se manda
+	// con una URL local, rechaza la creación de la preferencia. Por eso lo
+	// activamos únicamente cuando la URL de retorno no es localhost.
+	if !strings.Contains(req.BackURLSuccess, "localhost") &&
+		!strings.Contains(req.BackURLSuccess, "127.0.0.1") {
+		request.AutoReturn = "approved"
+	}
+
 	result, err := client.Create(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create MercadoPago preference: %w", err)
@@ -113,12 +121,21 @@ func (c *Client) ValidateWebhookSignature(xSignature, xRequestID, paymentID stri
 		return true
 	}
 
+	// El formato IPN legacy (topic=payment) no envía x-signature: no hay HMAC que
+	// validar. Se confía en la verificación posterior contra la API de MP
+	// (GetPayment con el access token propio) dentro de ProcessPaymentWebhook.
+	if xSignature == "" {
+		return true
+	}
+
 	ts, v1 := parseSignatureHeader(xSignature)
 	if ts == "" || v1 == "" {
 		return false
 	}
 
-	manifest := fmt.Sprintf("id:%s;request-id:%s;ts:%s", paymentID, xRequestID, ts)
+	// Formato exacto del manifest de MercadoPago (incluye el ; final; el id va en
+	// minúsculas si fuera alfanumérico).
+	manifest := fmt.Sprintf("id:%s;request-id:%s;ts:%s;", strings.ToLower(paymentID), xRequestID, ts)
 
 	mac := hmac.New(sha256.New, []byte(c.webhookSecret))
 	mac.Write([]byte(manifest))

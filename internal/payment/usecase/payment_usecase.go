@@ -160,6 +160,12 @@ func (uc *paymentUseCase) ProcessPaymentWebhook(ctx context.Context, paymentID, 
 		return err
 	}
 
+	// Idempotencia: MP reenvía el aviso varias veces. Si ya está aprobado, no reprocesar.
+	if payment.Status == domain.PaymentStatusApproved {
+		log.Info("payment %s already approved, skipping webhook", payment.ID.Hex())
+		return nil
+	}
+
 	payment.MPPaymentID = fmt.Sprintf("%d", mpPayment.ID)
 
 	log.Info("processing webhook for payment %s: MP status=%s", payment.ID.Hex(), mpPayment.Status)

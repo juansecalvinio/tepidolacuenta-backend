@@ -50,7 +50,42 @@ func All() []Migration {
 			Name: "009_create_invitations_index",
 			Run:  createInvitationsIndex,
 		},
+		{
+			Name: "010_update_plan_prices",
+			Run:  updatePlanPrices,
+		},
+		{
+			Name: "011_update_plan_prices",
+			Run:  updatePlanPrices,
+		},
 	}
+}
+
+// updatePlanPrices updates only the price field of existing plans
+func updatePlanPrices(ctx context.Context, db *mongo.Database) error {
+	plans := db.Collection("plans")
+
+	prices := map[string]int{
+		domain.PlanNameBasico:      19999,
+		domain.PlanNameIntermedio:  49999,
+		domain.PlanNameProfesional: 99999,
+	}
+
+	for name, price := range prices {
+		_, err := plans.UpdateOne(
+			ctx,
+			bson.M{"name": name},
+			bson.M{"$set": bson.M{
+				"price":      price,
+				"updated_at": time.Now(),
+			}},
+		)
+		if err != nil && err != mongo.ErrNoDocuments {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // updatePlanValues sets the correct prices, limits and trial days for both plans
@@ -84,7 +119,7 @@ func updatePlanValues(ctx context.Context, db *mongo.Database) error {
 		{
 			name: domain.PlanNameProfesional,
 			fields: bson.M{
-				"price":        199999,
+				"price":        99999,
 				"max_tables":   domain.Unlimited,
 				"max_branches": domain.Unlimited,
 				"trial_days":   30,

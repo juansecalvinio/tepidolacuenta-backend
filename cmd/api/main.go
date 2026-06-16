@@ -282,9 +282,9 @@ func seedPlans(ctx context.Context, repo subscriptionRepo.PlanRepository) error 
 	}
 
 	plans := []*subscriptionDomain.Plan{
-		subscriptionDomain.NewPlan(subscriptionDomain.PlanNameBasico, 19.99, 20, 1, 30),
-		subscriptionDomain.NewPlan(subscriptionDomain.PlanNameIntermedio, 49.99, 50, 3, 30),
-		subscriptionDomain.NewPlan(subscriptionDomain.PlanNameProfesional, 199.99, subscriptionDomain.Unlimited, subscriptionDomain.Unlimited, 30),
+		subscriptionDomain.NewPlan(subscriptionDomain.PlanNameBasico, 19999, 20, 1, 30),
+		subscriptionDomain.NewPlan(subscriptionDomain.PlanNameIntermedio, 49999, 50, 3, 30),
+		subscriptionDomain.NewPlan(subscriptionDomain.PlanNameProfesional, 99999, subscriptionDomain.Unlimited, subscriptionDomain.Unlimited, 30),
 	}
 
 	for _, plan := range plans {

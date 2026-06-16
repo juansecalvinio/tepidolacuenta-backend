@@ -69,30 +69,44 @@ func (h *Handler) ProcessWebhook(c *gin.Context) {
 	xSignature := c.GetHeader("x-signature")
 	xRequestID := c.GetHeader("x-request-id")
 
-	bodyBytes, err := io.ReadAll(c.Request.Body)
-	if err != nil {
-		pkg.BadRequestResponse(c, "Failed to read request body", err)
-		return
+	// MercadoPago entrega el aviso en distintos formatos y el ID del pago viene
+	// de forma confiable en la query string (el body es opcional/inconsistente):
+	//   - Webhooks (nuevo):  ?type=payment&data.id=<id>
+	//   - IPN (legacy):      ?topic=payment&id=<id>
+	notifType := c.Query("type")
+	if notifType == "" {
+		notifType = c.Query("topic")
 	}
 
-	var body domain.WebhookBody
-	if err := json.Unmarshal(bodyBytes, &body); err != nil {
-		pkg.BadRequestResponse(c, "Invalid webhook body", err)
-		return
-	}
-
-	if body.Data.ID == "" || body.Action == "" {
+	// Sólo procesamos avisos de pago; merchant_order y otros se confirman sin acción.
+	if notifType != "payment" {
 		c.Status(http.StatusOK)
 		return
 	}
 
-	// Only process payment notifications
-	if body.Action != "payment.created" && body.Action != "payment.updated" {
+	paymentID := c.Query("data.id")
+	if paymentID == "" {
+		paymentID = c.Query("id")
+	}
+
+	// Fallback: algunos avisos traen el id sólo en el body.
+	if paymentID == "" {
+		bodyBytes, readErr := io.ReadAll(c.Request.Body)
+		if readErr == nil && len(bodyBytes) > 0 {
+			var body domain.WebhookBody
+			if json.Unmarshal(bodyBytes, &body) == nil {
+				paymentID = body.Data.ID
+			}
+		}
+	}
+
+	if paymentID == "" {
+		// Nada que procesar: ack para que MercadoPago no reintente.
 		c.Status(http.StatusOK)
 		return
 	}
 
-	if err := h.useCase.ProcessPaymentWebhook(c.Request.Context(), body.Data.ID, xSignature, xRequestID); err != nil {
+	if err := h.useCase.ProcessPaymentWebhook(c.Request.Context(), paymentID, xSignature, xRequestID); err != nil {
 		if errors.Is(err, pkg.ErrUnauthorized) {
 			pkg.BadRequestResponse(c, "Invalid webhook signature", err)
 			return
