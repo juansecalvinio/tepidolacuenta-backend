@@ -46,6 +46,10 @@ func NotFoundResponse(c *gin.Context, message string, err error) {
 	ErrorResponse(c, http.StatusNotFound, message, err)
 }
 
+func ForbiddenResponse(c *gin.Context, message string, err error) {
+	ErrorResponse(c, http.StatusForbidden, message, err)
+}
+
 func InternalServerErrorResponse(c *gin.Context, message string, err error) {
 	ErrorResponse(c, http.StatusInternalServerError, message, err)
 }

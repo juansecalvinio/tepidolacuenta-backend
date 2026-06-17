@@ -17,10 +17,11 @@ import (
 // UseCase defines the interface for request use cases
 type UseCase interface {
 	Create(ctx context.Context, input domain.CreateRequestInput) (*domain.Request, error)
-	GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) (*domain.Request, error)
-	GetByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID) ([]*domain.Request, error)
-	GetPendingByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID) ([]*domain.Request, error)
-	UpdateStatus(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, input domain.UpdateRequestStatusInput) (*domain.Request, error)
+	GetVenueInfo(ctx context.Context, input domain.VenueInfoInput) (*domain.VenueInfo, error)
+	GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID) (*domain.Request, error)
+	GetByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID, branchIDHint *primitive.ObjectID) ([]*domain.Request, error)
+	GetPendingByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID, branchIDHint *primitive.ObjectID) ([]*domain.Request, error)
+	UpdateStatus(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, input domain.UpdateRequestStatusInput, restaurantIDHint *primitive.ObjectID) (*domain.Request, error)
 	Delete(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) error
 }
 
@@ -50,6 +51,21 @@ func NewRequestUseCase(
 		qrService:      qrService,
 		notifyFunc:     notifyFunc,
 	}
+}
+
+// authorizeRestaurantAccess checks whether the caller can access the given restaurant.
+// Employees carry their restaurantID in the JWT (hint); owners are matched by UserID.
+func authorizeRestaurantAccess(restaurantID, ownerUserID, callerUserID primitive.ObjectID, hint *primitive.ObjectID) error {
+	if hint != nil {
+		if restaurantID != *hint {
+			return pkg.ErrForbidden
+		}
+		return nil
+	}
+	if ownerUserID != callerUserID {
+		return pkg.ErrUnauthorized
+	}
+	return nil
 }
 
 // Create creates a new request from a QR code scan
@@ -133,75 +149,121 @@ func (uc *requestUseCase) Create(ctx context.Context, input domain.CreateRequest
 	return request, nil
 }
 
+// GetVenueInfo returns the public restaurant/branch/table info for a scanned QR.
+// Validates the QR hash so venue names can't be enumerated by guessing IDs.
+func (uc *requestUseCase) GetVenueInfo(ctx context.Context, input domain.VenueInfoInput) (*domain.VenueInfo, error) {
+	restaurantID, err := primitive.ObjectIDFromHex(input.RestaurantID)
+	if err != nil {
+		return nil, errors.New("invalid restaurant ID")
+	}
+
+	branchID, err := primitive.ObjectIDFromHex(input.BranchID)
+	if err != nil {
+		return nil, errors.New("invalid branch ID")
+	}
+
+	tableID, err := primitive.ObjectIDFromHex(input.TableID)
+	if err != nil {
+		return nil, errors.New("invalid table ID")
+	}
+
+	// Validate QR code
+	if !uc.qrService.ValidateTableQRCode(restaurantID, branchID, tableID, input.TableNumber, input.Hash) {
+		return nil, errors.New("invalid QR code")
+	}
+
+	restaurant, err := uc.restaurantRepo.FindByID(ctx, restaurantID)
+	if err != nil {
+		return nil, err
+	}
+
+	branch, err := uc.branchRepo.FindByID(ctx, branchID)
+	if err != nil {
+		return nil, err
+	}
+
+	if branch.RestaurantID != restaurantID {
+		return nil, errors.New("branch does not belong to restaurant")
+	}
+
+	return &domain.VenueInfo{
+		RestaurantName: restaurant.Name,
+		BranchAddress:  branch.Address,
+		TableNumber:    input.TableNumber,
+	}, nil
+}
+
 // GetByID retrieves a request by ID
-func (uc *requestUseCase) GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) (*domain.Request, error) {
+func (uc *requestUseCase) GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID) (*domain.Request, error) {
 	request, err := uc.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	// Verify user owns the restaurant
 	restaurant, err := uc.restaurantRepo.FindByID(ctx, request.RestaurantID)
 	if err != nil {
 		return nil, err
 	}
 
-	if restaurant.UserID != userID {
-		return nil, pkg.ErrUnauthorized
+	if err := authorizeRestaurantAccess(restaurant.ID, restaurant.UserID, userID, restaurantIDHint); err != nil {
+		return nil, err
 	}
 
 	return request, nil
 }
 
-// GetByRestaurantID retrieves all requests for a restaurant
-func (uc *requestUseCase) GetByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID) ([]*domain.Request, error) {
-	// Verify user owns the restaurant
+// GetByRestaurantID retrieves all requests for a restaurant.
+// Branch-scoped employees only get the requests of their branch.
+func (uc *requestUseCase) GetByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID, branchIDHint *primitive.ObjectID) ([]*domain.Request, error) {
 	restaurant, err := uc.restaurantRepo.FindByID(ctx, restaurantID)
 	if err != nil {
 		return nil, err
 	}
 
-	if restaurant.UserID != userID {
-		return nil, pkg.ErrUnauthorized
+	if err := authorizeRestaurantAccess(restaurant.ID, restaurant.UserID, userID, restaurantIDHint); err != nil {
+		return nil, err
 	}
 
+	if branchIDHint != nil {
+		return uc.repo.FindByBranchID(ctx, *branchIDHint)
+	}
 	return uc.repo.FindByRestaurantID(ctx, restaurantID)
 }
 
-// GetPendingByRestaurantID retrieves all pending requests for a restaurant
-func (uc *requestUseCase) GetPendingByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID) ([]*domain.Request, error) {
-	// Verify user owns the restaurant
+// GetPendingByRestaurantID retrieves all pending requests for a restaurant.
+// Branch-scoped employees only get the pending requests of their branch.
+func (uc *requestUseCase) GetPendingByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID, branchIDHint *primitive.ObjectID) ([]*domain.Request, error) {
 	restaurant, err := uc.restaurantRepo.FindByID(ctx, restaurantID)
 	if err != nil {
 		return nil, err
 	}
 
-	if restaurant.UserID != userID {
-		return nil, pkg.ErrUnauthorized
+	if err := authorizeRestaurantAccess(restaurant.ID, restaurant.UserID, userID, restaurantIDHint); err != nil {
+		return nil, err
 	}
 
+	if branchIDHint != nil {
+		return uc.repo.FindPendingByBranchID(ctx, *branchIDHint)
+	}
 	return uc.repo.FindPendingByRestaurantID(ctx, restaurantID)
 }
 
 // UpdateStatus updates a request's status
-func (uc *requestUseCase) UpdateStatus(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, input domain.UpdateRequestStatusInput) (*domain.Request, error) {
-	// Find request
+func (uc *requestUseCase) UpdateStatus(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, input domain.UpdateRequestStatusInput, restaurantIDHint *primitive.ObjectID) (*domain.Request, error) {
 	request, err := uc.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	// Verify user owns the restaurant
 	restaurant, err := uc.restaurantRepo.FindByID(ctx, request.RestaurantID)
 	if err != nil {
 		return nil, err
 	}
 
-	if restaurant.UserID != userID {
-		return nil, pkg.ErrUnauthorized
+	if err := authorizeRestaurantAccess(restaurant.ID, restaurant.UserID, userID, restaurantIDHint); err != nil {
+		return nil, err
 	}
 
-	// Update status
 	request.UpdateStatus(domain.RequestStatus(input.Status))
 
 	if err := uc.repo.Update(ctx, request); err != nil {
@@ -211,15 +273,13 @@ func (uc *requestUseCase) UpdateStatus(ctx context.Context, id primitive.ObjectI
 	return request, nil
 }
 
-// Delete deletes a request
+// Delete deletes a request (owner-only)
 func (uc *requestUseCase) Delete(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) error {
-	// Find request
 	request, err := uc.repo.FindByID(ctx, id)
 	if err != nil {
 		return err
 	}
 
-	// Verify user owns the restaurant
 	restaurant, err := uc.restaurantRepo.FindByID(ctx, request.RestaurantID)
 	if err != nil {
 		return err

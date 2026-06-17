@@ -14,38 +14,49 @@ import (
 
 	"juansecalvinio/tepidolacuenta/internal/auth/domain"
 	"juansecalvinio/tepidolacuenta/internal/auth/repository"
+	invitationUseCase "juansecalvinio/tepidolacuenta/internal/invitation/usecase"
 	"juansecalvinio/tepidolacuenta/internal/pkg"
+	restaurantRepo "juansecalvinio/tepidolacuenta/internal/restaurant/repository"
 
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/oauth2"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 // UseCase defines the interface for authentication use cases
 type UseCase interface {
 	Register(ctx context.Context, input domain.RegisterInput) (*domain.User, error)
+	RegisterEmployee(ctx context.Context, input domain.EmployeeRegisterInput) (*domain.LoginResponse, error)
 	Login(ctx context.Context, input domain.LoginInput) (*domain.LoginResponse, error)
 	ForgotPassword(ctx context.Context, input domain.ForgotPasswordInput) error
 	ResetPassword(ctx context.Context, input domain.ResetPasswordInput) error
 	GoogleAuthURL(state string) string
 	HandleGoogleCallback(ctx context.Context, code string) (*domain.LoginResponse, error)
+	AcceptInvitation(ctx context.Context, userID primitive.ObjectID, code string) (*domain.LoginResponse, error)
+	ListEmployees(ctx context.Context, ownerUserID, restaurantID primitive.ObjectID) ([]*domain.User, error)
+	RevokeEmployee(ctx context.Context, ownerUserID, restaurantID, employeeID primitive.ObjectID) error
 }
 
 type authUseCase struct {
 	repo            repository.Repository
+	restaurantRepo  restaurantRepo.Repository
 	jwtService      *pkg.JWTService
 	emailService    *pkg.EmailService
 	frontendBaseURL string
 	googleOAuth     *oauth2.Config
+	invitationUC    invitationUseCase.UseCase
 }
 
 // NewAuthUseCase creates a new authentication use case
-func NewAuthUseCase(repo repository.Repository, jwtService *pkg.JWTService, emailService *pkg.EmailService, frontendBaseURL string, googleOAuth *oauth2.Config) UseCase {
+func NewAuthUseCase(repo repository.Repository, restaurantRepository restaurantRepo.Repository, jwtService *pkg.JWTService, emailService *pkg.EmailService, frontendBaseURL string, googleOAuth *oauth2.Config, invitationUC invitationUseCase.UseCase) UseCase {
 	return &authUseCase{
 		repo:            repo,
+		restaurantRepo:  restaurantRepository,
 		jwtService:      jwtService,
 		emailService:    emailService,
 		frontendBaseURL: frontendBaseURL,
 		googleOAuth:     googleOAuth,
+		invitationUC:    invitationUC,
 	}
 }
 
@@ -92,7 +103,15 @@ func (uc *authUseCase) Login(ctx context.Context, input domain.LoginInput) (*dom
 		return nil, pkg.ErrInvalidCredentials
 	}
 
-	token, err := uc.jwtService.GenerateToken(user.ID, user.Email)
+	restaurantID := ""
+	if user.RestaurantID != nil {
+		restaurantID = user.RestaurantID.Hex()
+	}
+	branchID := ""
+	if user.BranchID != nil {
+		branchID = user.BranchID.Hex()
+	}
+	token, err := uc.jwtService.GenerateToken(user.ID, user.Email, string(user.Role), restaurantID, branchID)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +120,38 @@ func (uc *authUseCase) Login(ctx context.Context, input domain.LoginInput) (*dom
 		Token: token,
 		User:  *user,
 	}, nil
+}
+
+// RegisterEmployee registers a new employee using a valid invitation code
+func (uc *authUseCase) RegisterEmployee(ctx context.Context, input domain.EmployeeRegisterInput) (*domain.LoginResponse, error) {
+	if !pkg.IsValidEmail(input.Email) {
+		return nil, pkg.ErrInvalidInput
+	}
+
+	if !pkg.IsValidPassword(input.Password) {
+		return nil, errors.New("password must be at least 8 characters")
+	}
+
+	inv, err := uc.invitationUC.Redeem(ctx, input.InvitationCode)
+	if err != nil {
+		return nil, err
+	}
+
+	user := domain.NewEmployeeUser(input.Email, input.Password, inv.RestaurantID, inv.BranchID)
+	if err := user.HashPassword(); err != nil {
+		return nil, err
+	}
+
+	if err := uc.repo.Create(ctx, user); err != nil {
+		return nil, err
+	}
+
+	token, err := uc.jwtService.GenerateToken(user.ID, user.Email, string(domain.RoleEmployee), inv.RestaurantID.Hex(), inv.BranchID.Hex())
+	if err != nil {
+		return nil, err
+	}
+
+	return &domain.LoginResponse{Token: token, User: *user}, nil
 }
 
 // ForgotPassword generates a reset token and sends it by email
@@ -176,7 +227,7 @@ func (uc *authUseCase) HandleGoogleCallback(ctx context.Context, code string) (*
 		return nil, err
 	}
 
-	jwtToken, err := uc.jwtService.GenerateToken(user.ID, user.Email)
+	jwtToken, err := uc.jwtService.GenerateToken(user.ID, user.Email, string(domain.RoleOwner), "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -253,10 +304,75 @@ func fetchGoogleUserInfo(ctx context.Context, cfg *oauth2.Config, token *oauth2.
 	return &info, nil
 }
 
+// AcceptInvitation links an already-authenticated Google user to a restaurant as an employee.
+func (uc *authUseCase) AcceptInvitation(ctx context.Context, userID primitive.ObjectID, code string) (*domain.LoginResponse, error) {
+	inv, err := uc.invitationUC.Redeem(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := uc.repo.UpdateRoleAndRestaurant(ctx, userID, domain.RoleEmployee, inv.RestaurantID, inv.BranchID); err != nil {
+		return nil, err
+	}
+
+	user, err := uc.repo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	token, err := uc.jwtService.GenerateToken(user.ID, user.Email, string(domain.RoleEmployee), inv.RestaurantID.Hex(), inv.BranchID.Hex())
+	if err != nil {
+		return nil, err
+	}
+
+	return &domain.LoginResponse{Token: token, User: *user}, nil
+}
+
 func generateResetToken() (string, error) {
 	bytes := make([]byte, 32)
 	if _, err := rand.Read(bytes); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(bytes), nil
+}
+
+// assertOwnsRestaurant verifies the caller owns the given restaurant.
+func (uc *authUseCase) assertOwnsRestaurant(ctx context.Context, ownerUserID, restaurantID primitive.ObjectID) error {
+	restaurant, err := uc.restaurantRepo.FindByID(ctx, restaurantID)
+	if err != nil {
+		return err
+	}
+	if restaurant.UserID != ownerUserID {
+		return pkg.ErrForbidden
+	}
+	return nil
+}
+
+// ListEmployees returns the employees linked to the owner's restaurant.
+func (uc *authUseCase) ListEmployees(ctx context.Context, ownerUserID, restaurantID primitive.ObjectID) ([]*domain.User, error) {
+	if err := uc.assertOwnsRestaurant(ctx, ownerUserID, restaurantID); err != nil {
+		return nil, err
+	}
+	return uc.repo.FindEmployeesByRestaurantID(ctx, restaurantID)
+}
+
+// RevokeEmployee unlinks an employee from the owner's restaurant (keeps the account).
+func (uc *authUseCase) RevokeEmployee(ctx context.Context, ownerUserID, restaurantID, employeeID primitive.ObjectID) error {
+	if err := uc.assertOwnsRestaurant(ctx, ownerUserID, restaurantID); err != nil {
+		return err
+	}
+
+	employee, err := uc.repo.FindByID(ctx, employeeID)
+	if err != nil {
+		return err
+	}
+
+	// El empleado debe pertenecer a este local (evita revocar ajenos).
+	if employee.Role != domain.RoleEmployee ||
+		employee.RestaurantID == nil ||
+		*employee.RestaurantID != restaurantID {
+		return pkg.ErrForbidden
+	}
+
+	return uc.repo.UnlinkFromRestaurant(ctx, employeeID)
 }

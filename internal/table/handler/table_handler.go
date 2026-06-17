@@ -66,6 +66,10 @@ func (h *Handler) Create(c *gin.Context) {
 			pkg.NotFoundResponse(c, "Branch not found", err)
 			return
 		}
+		if errors.Is(err, pkg.ErrPlanLimitReached) {
+			pkg.ForbiddenResponse(c, "Your plan does not allow more tables", err)
+			return
+		}
 		pkg.InternalServerErrorResponse(c, "Failed to create table", err)
 		return
 	}
@@ -115,6 +119,10 @@ func (h *Handler) BulkCreate(c *gin.Context) {
 			pkg.NotFoundResponse(c, "Branch not found", err)
 			return
 		}
+		if errors.Is(err, pkg.ErrPlanLimitReached) {
+			pkg.ForbiddenResponse(c, "Your plan does not allow more tables", err)
+			return
+		}
 		pkg.InternalServerErrorResponse(c, "Failed to create tables", err)
 		return
 	}
@@ -156,7 +164,9 @@ func (h *Handler) GetByID(c *gin.Context) {
 		return
 	}
 
-	table, err := h.useCase.GetByID(c.Request.Context(), tableID, userID)
+	restaurantIDHint := extractRestaurantIDHint(c)
+
+	table, err := h.useCase.GetByID(c.Request.Context(), tableID, userID, restaurantIDHint)
 	if err != nil {
 		if errors.Is(err, pkg.ErrNotFound) {
 			pkg.NotFoundResponse(c, "Table not found", err)
@@ -164,6 +174,10 @@ func (h *Handler) GetByID(c *gin.Context) {
 		}
 		if errors.Is(err, pkg.ErrUnauthorized) {
 			pkg.UnauthorizedResponse(c, "You don't have access to this table", err)
+			return
+		}
+		if errors.Is(err, pkg.ErrForbidden) {
+			pkg.ForbiddenResponse(c, "You don't have access to this table", err)
 			return
 		}
 		pkg.InternalServerErrorResponse(c, "Failed to get table", err)
@@ -206,7 +220,9 @@ func (h *Handler) ListByBranch(c *gin.Context) {
 		return
 	}
 
-	tables, err := h.useCase.GetByBranchID(c.Request.Context(), branchID, userID)
+	restaurantIDHint := extractRestaurantIDHint(c)
+
+	tables, err := h.useCase.GetByBranchID(c.Request.Context(), branchID, userID, restaurantIDHint)
 	if err != nil {
 		if errors.Is(err, pkg.ErrNotFound) {
 			pkg.NotFoundResponse(c, "Branch not found", err)
@@ -216,11 +232,28 @@ func (h *Handler) ListByBranch(c *gin.Context) {
 			pkg.UnauthorizedResponse(c, "You don't have access to this branch", err)
 			return
 		}
+		if errors.Is(err, pkg.ErrForbidden) {
+			pkg.ForbiddenResponse(c, "You don't have access to this branch", err)
+			return
+		}
 		pkg.InternalServerErrorResponse(c, "Failed to get tables", err)
 		return
 	}
 
 	pkg.SuccessResponse(c, http.StatusOK, "Tables retrieved successfully", tables)
+}
+
+// extractRestaurantIDHint parses the employee's restaurantID from context (nil for owners).
+func extractRestaurantIDHint(c *gin.Context) *primitive.ObjectID {
+	ridStr, ok := middleware.GetUserRestaurantID(c)
+	if !ok {
+		return nil
+	}
+	rid, err := primitive.ObjectIDFromHex(ridStr)
+	if err != nil {
+		return nil
+	}
+	return &rid
 }
 
 // Update handles table updates
@@ -332,15 +365,21 @@ func (h *Handler) Delete(c *gin.Context) {
 	pkg.SuccessResponse(c, http.StatusOK, "Table deleted successfully", nil)
 }
 
-// RegisterRoutes registers all table routes
+// RegisterRoutes registers all table routes.
+// Read routes are accessible by owners and employees; write routes are owner-only.
 func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	tables := router.Group("/tables")
 	{
-		tables.POST("", h.Create)
-		tables.POST("/bulk", h.BulkCreate)
 		tables.GET("/:id", h.GetByID)
 		tables.GET("/branch/:branchId", h.ListByBranch)
-		tables.PUT("/:id", h.Update)
-		tables.DELETE("/:id", h.Delete)
+	}
+
+	ownerTables := tables.Group("")
+	ownerTables.Use(middleware.OwnerOnly())
+	{
+		ownerTables.POST("", h.Create)
+		ownerTables.POST("/bulk", h.BulkCreate)
+		ownerTables.PUT("/:id", h.Update)
+		ownerTables.DELETE("/:id", h.Delete)
 	}
 }

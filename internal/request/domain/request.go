@@ -52,6 +52,22 @@ type UpdateRequestStatusInput struct {
 	Status string `json:"status" binding:"required,oneof=pending attended cancelled"`
 }
 
+// VenueInfoInput represents the QR params used to look up public venue info.
+type VenueInfoInput struct {
+	RestaurantID string `form:"r" binding:"required"`
+	BranchID     string `form:"b" binding:"required"`
+	TableID      string `form:"t" binding:"required"`
+	TableNumber  int    `form:"n" binding:"required,min=1"`
+	Hash         string `form:"h" binding:"required"`
+}
+
+// VenueInfo is the public information shown to a diner after scanning a table QR.
+type VenueInfo struct {
+	RestaurantName string `json:"restaurantName"`
+	BranchAddress  string `json:"branchAddress"`
+	TableNumber    int    `json:"tableNumber"`
+}
+
 // NewRequest creates a new request
 func NewRequest(restaurantID, branchID, tableID primitive.ObjectID, tableNumber int, paymentMethod PaymentMethod) *Request {
 	now := time.Now()

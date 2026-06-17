@@ -8,6 +8,8 @@ import (
 	branchRepo "juansecalvinio/tepidolacuenta/internal/branch/repository"
 	"juansecalvinio/tepidolacuenta/internal/pkg"
 	restaurantRepo "juansecalvinio/tepidolacuenta/internal/restaurant/repository"
+	subscriptionDomain "juansecalvinio/tepidolacuenta/internal/subscription/domain"
+	subscriptionRepo "juansecalvinio/tepidolacuenta/internal/subscription/repository"
 	"juansecalvinio/tepidolacuenta/internal/table/domain"
 	"juansecalvinio/tepidolacuenta/internal/table/repository"
 
@@ -18,31 +20,43 @@ import (
 type UseCase interface {
 	Create(ctx context.Context, userID primitive.ObjectID, input domain.CreateTableInput) (*domain.Table, error)
 	BulkCreate(ctx context.Context, userID primitive.ObjectID, input domain.BulkCreateTablesInput) ([]*domain.Table, error)
-	GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) (*domain.Table, error)
-	GetByBranchID(ctx context.Context, branchID primitive.ObjectID, userID primitive.ObjectID) ([]*domain.Table, error)
+	GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID) (*domain.Table, error)
+	GetByBranchID(ctx context.Context, branchID primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID) ([]*domain.Table, error)
 	Update(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, input domain.UpdateTableInput) (*domain.Table, error)
 	Delete(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) error
 }
 
 type tableUseCase struct {
-	repo           repository.Repository
-	branchRepo     branchRepo.Repository
-	restaurantRepo restaurantRepo.Repository
-	qrService      *pkg.QRService
+	repo             repository.Repository
+	branchRepo       branchRepo.Repository
+	restaurantRepo   restaurantRepo.Repository
+	subscriptionRepo subscriptionRepo.SubscriptionRepository
+	planRepo         subscriptionRepo.PlanRepository
+	qrService        *pkg.QRService
 }
 
 // NewTableUseCase creates a new table use case
-func NewTableUseCase(repo repository.Repository, branchRepo branchRepo.Repository, restaurantRepo restaurantRepo.Repository, qrService *pkg.QRService) UseCase {
+func NewTableUseCase(
+	repo repository.Repository,
+	branchRepo branchRepo.Repository,
+	restaurantRepo restaurantRepo.Repository,
+	subscriptionRepo subscriptionRepo.SubscriptionRepository,
+	planRepo subscriptionRepo.PlanRepository,
+	qrService *pkg.QRService,
+) UseCase {
 	return &tableUseCase{
-		repo:           repo,
-		branchRepo:     branchRepo,
-		restaurantRepo: restaurantRepo,
-		qrService:      qrService,
+		repo:             repo,
+		branchRepo:       branchRepo,
+		restaurantRepo:   restaurantRepo,
+		subscriptionRepo: subscriptionRepo,
+		planRepo:         planRepo,
+		qrService:        qrService,
 	}
 }
 
-// verifyBranchOwnership verifies that a branch exists and the user owns it
-func (uc *tableUseCase) verifyBranchOwnership(ctx context.Context, branchID, userID primitive.ObjectID) (*primitive.ObjectID, error) {
+// verifyBranchAccess verifies that a branch exists and the caller can access it.
+// Pass nil for restaurantIDHint when called from owner-only operations.
+func (uc *tableUseCase) verifyBranchAccess(ctx context.Context, branchID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID) (*primitive.ObjectID, error) {
 	branch, err := uc.branchRepo.FindByID(ctx, branchID)
 	if err != nil {
 		return nil, err
@@ -53,8 +67,14 @@ func (uc *tableUseCase) verifyBranchOwnership(ctx context.Context, branchID, use
 		return nil, err
 	}
 
-	if restaurant.UserID != userID {
-		return nil, pkg.ErrUnauthorized
+	if restaurantIDHint != nil {
+		if restaurant.ID != *restaurantIDHint {
+			return nil, pkg.ErrForbidden
+		}
+	} else {
+		if restaurant.UserID != userID {
+			return nil, pkg.ErrUnauthorized
+		}
 	}
 
 	return &branch.RestaurantID, nil
@@ -74,8 +94,13 @@ func (uc *tableUseCase) Create(ctx context.Context, userID primitive.ObjectID, i
 	}
 
 	// Verify branch exists and user owns it
-	restaurantID, err := uc.verifyBranchOwnership(ctx, branchID, userID)
+	restaurantID, err := uc.verifyBranchAccess(ctx, branchID, userID, nil)
 	if err != nil {
+		return nil, err
+	}
+
+	// Validate plan table limit (adding 1 table)
+	if err := uc.checkTablePlanLimit(ctx, *restaurantID, 1); err != nil {
 		return nil, err
 	}
 
@@ -118,8 +143,13 @@ func (uc *tableUseCase) BulkCreate(ctx context.Context, userID primitive.ObjectI
 	}
 
 	// Verify branch exists and user owns it
-	restaurantID, err := uc.verifyBranchOwnership(ctx, branchID, userID)
+	restaurantID, err := uc.verifyBranchAccess(ctx, branchID, userID, nil)
 	if err != nil {
+		return nil, err
+	}
+
+	// Validate plan table limit (adding input.Count tables)
+	if err := uc.checkTablePlanLimit(ctx, *restaurantID, input.Count); err != nil {
 		return nil, err
 	}
 
@@ -166,14 +196,13 @@ func (uc *tableUseCase) BulkCreate(ctx context.Context, userID primitive.ObjectI
 }
 
 // GetByID retrieves a table by ID
-func (uc *tableUseCase) GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) (*domain.Table, error) {
+func (uc *tableUseCase) GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID) (*domain.Table, error) {
 	table, err := uc.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	// Verify user owns the branch
-	_, err = uc.verifyBranchOwnership(ctx, table.BranchID, userID)
+	_, err = uc.verifyBranchAccess(ctx, table.BranchID, userID, restaurantIDHint)
 	if err != nil {
 		return nil, err
 	}
@@ -182,9 +211,8 @@ func (uc *tableUseCase) GetByID(ctx context.Context, id primitive.ObjectID, user
 }
 
 // GetByBranchID retrieves all tables for a branch
-func (uc *tableUseCase) GetByBranchID(ctx context.Context, branchID primitive.ObjectID, userID primitive.ObjectID) ([]*domain.Table, error) {
-	// Verify user owns the branch
-	_, err := uc.verifyBranchOwnership(ctx, branchID, userID)
+func (uc *tableUseCase) GetByBranchID(ctx context.Context, branchID primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID) ([]*domain.Table, error) {
+	_, err := uc.verifyBranchAccess(ctx, branchID, userID, restaurantIDHint)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +229,7 @@ func (uc *tableUseCase) Update(ctx context.Context, id primitive.ObjectID, userI
 	}
 
 	// Verify user owns the branch
-	restaurantID, err := uc.verifyBranchOwnership(ctx, table.BranchID, userID)
+	restaurantID, err := uc.verifyBranchAccess(ctx, table.BranchID, userID, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -255,10 +283,49 @@ func (uc *tableUseCase) Delete(ctx context.Context, id primitive.ObjectID, userI
 	}
 
 	// Verify user owns the branch
-	_, err = uc.verifyBranchOwnership(ctx, table.BranchID, userID)
+	_, err = uc.verifyBranchAccess(ctx, table.BranchID, userID, nil)
 	if err != nil {
 		return err
 	}
 
 	return uc.repo.Delete(ctx, id)
+}
+
+// checkTablePlanLimit verifies the restaurant's plan allows adding `count` more tables across all its branches
+func (uc *tableUseCase) checkTablePlanLimit(ctx context.Context, restaurantID primitive.ObjectID, count int) error {
+	subscription, err := uc.subscriptionRepo.FindByRestaurantID(ctx, restaurantID)
+	if err != nil {
+		return pkg.ErrPlanLimitReached
+	}
+
+	plan, err := uc.planRepo.FindByID(ctx, subscription.PlanID)
+	if err != nil {
+		return err
+	}
+
+	// Unlimited tables
+	if plan.MaxTables == subscriptionDomain.Unlimited {
+		return nil
+	}
+
+	// Count all existing tables across all branches of the restaurant
+	branches, err := uc.branchRepo.FindByRestaurantID(ctx, restaurantID)
+	if err != nil {
+		return err
+	}
+
+	totalTables := 0
+	for _, branch := range branches {
+		tables, err := uc.repo.FindByBranchID(ctx, branch.ID)
+		if err != nil {
+			return err
+		}
+		totalTables += len(tables)
+	}
+
+	if totalTables+count > plan.MaxTables {
+		return pkg.ErrPlanLimitReached
+	}
+
+	return nil
 }

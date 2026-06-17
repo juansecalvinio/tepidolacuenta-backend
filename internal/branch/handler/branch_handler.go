@@ -54,6 +54,10 @@ func (h *Handler) Create(c *gin.Context) {
 			pkg.NotFoundResponse(c, "Restaurant not found", err)
 			return
 		}
+		if errors.Is(err, pkg.ErrPlanLimitReached) {
+			pkg.ForbiddenResponse(c, "Your plan does not allow more branches", err)
+			return
+		}
 		pkg.InternalServerErrorResponse(c, "Failed to create branch", err)
 		return
 	}
@@ -82,7 +86,9 @@ func (h *Handler) GetByID(c *gin.Context) {
 		return
 	}
 
-	branch, err := h.useCase.GetByID(c.Request.Context(), branchID, userID)
+	restaurantIDHint := extractRestaurantIDHint(c)
+
+	branch, err := h.useCase.GetByID(c.Request.Context(), branchID, userID, restaurantIDHint)
 	if err != nil {
 		if errors.Is(err, pkg.ErrNotFound) {
 			pkg.NotFoundResponse(c, "Branch not found", err)
@@ -90,6 +96,10 @@ func (h *Handler) GetByID(c *gin.Context) {
 		}
 		if errors.Is(err, pkg.ErrUnauthorized) {
 			pkg.UnauthorizedResponse(c, "You don't have access to this branch", err)
+			return
+		}
+		if errors.Is(err, pkg.ErrForbidden) {
+			pkg.ForbiddenResponse(c, "You don't have access to this branch", err)
 			return
 		}
 		pkg.InternalServerErrorResponse(c, "Failed to get branch", err)
@@ -120,7 +130,9 @@ func (h *Handler) ListByRestaurant(c *gin.Context) {
 		return
 	}
 
-	branches, err := h.useCase.GetByRestaurantID(c.Request.Context(), restaurantID, userID)
+	restaurantIDHint := extractRestaurantIDHint(c)
+
+	branches, err := h.useCase.GetByRestaurantID(c.Request.Context(), restaurantID, userID, restaurantIDHint)
 	if err != nil {
 		if errors.Is(err, pkg.ErrNotFound) {
 			pkg.NotFoundResponse(c, "Restaurant not found", err)
@@ -130,11 +142,28 @@ func (h *Handler) ListByRestaurant(c *gin.Context) {
 			pkg.UnauthorizedResponse(c, "You don't have access to this restaurant", err)
 			return
 		}
+		if errors.Is(err, pkg.ErrForbidden) {
+			pkg.ForbiddenResponse(c, "You don't have access to this restaurant", err)
+			return
+		}
 		pkg.InternalServerErrorResponse(c, "Failed to get branches", err)
 		return
 	}
 
 	pkg.SuccessResponse(c, http.StatusOK, "Branches retrieved successfully", branches)
+}
+
+// extractRestaurantIDHint parses the employee's restaurantID from context (nil for owners).
+func extractRestaurantIDHint(c *gin.Context) *primitive.ObjectID {
+	ridStr, ok := middleware.GetUserRestaurantID(c)
+	if !ok {
+		return nil
+	}
+	rid, err := primitive.ObjectIDFromHex(ridStr)
+	if err != nil {
+		return nil
+	}
+	return &rid
 }
 
 // Update handles branch updates
@@ -218,14 +247,20 @@ func (h *Handler) Delete(c *gin.Context) {
 	pkg.SuccessResponse(c, http.StatusOK, "Branch deleted successfully", nil)
 }
 
-// RegisterRoutes registers all branch routes
+// RegisterRoutes registers all branch routes.
+// Read routes are accessible by owners and employees; write routes are owner-only.
 func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
 	branches := router.Group("/branches")
 	{
-		branches.POST("", h.Create)
 		branches.GET("/:id", h.GetByID)
 		branches.GET("/restaurant/:restaurantId", h.ListByRestaurant)
-		branches.PUT("/:id", h.Update)
-		branches.DELETE("/:id", h.Delete)
+	}
+
+	ownerBranches := branches.Group("")
+	ownerBranches.Use(middleware.OwnerOnly())
+	{
+		ownerBranches.POST("", h.Create)
+		ownerBranches.PUT("/:id", h.Update)
+		ownerBranches.DELETE("/:id", h.Delete)
 	}
 }

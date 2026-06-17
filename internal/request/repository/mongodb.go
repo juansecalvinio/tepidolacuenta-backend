@@ -81,6 +81,45 @@ func (r *mongoRepository) FindPendingByRestaurantID(ctx context.Context, restaur
 	return requests, nil
 }
 
+func (r *mongoRepository) FindByBranchID(ctx context.Context, branchID primitive.ObjectID) ([]*domain.Request, error) {
+	filter := bson.M{"branchId": branchID}
+	opts := options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}})
+
+	cursor, err := r.collection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	requests := make([]*domain.Request, 0)
+	if err := cursor.All(ctx, &requests); err != nil {
+		return nil, err
+	}
+
+	return requests, nil
+}
+
+func (r *mongoRepository) FindPendingByBranchID(ctx context.Context, branchID primitive.ObjectID) ([]*domain.Request, error) {
+	filter := bson.M{
+		"branchId": branchID,
+		"status":   domain.StatusPending,
+	}
+	opts := options.Find().SetSort(bson.D{{Key: "createdAt", Value: -1}})
+
+	cursor, err := r.collection.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	requests := make([]*domain.Request, 0)
+	if err := cursor.All(ctx, &requests); err != nil {
+		return nil, err
+	}
+
+	return requests, nil
+}
+
 func (r *mongoRepository) ExistsPendingForTable(ctx context.Context, tableID primitive.ObjectID) (bool, error) {
 	filter := bson.M{
 		"tableId": tableID,

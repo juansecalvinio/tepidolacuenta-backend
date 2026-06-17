@@ -15,6 +15,32 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// extractRestaurantIDHint parses the employee's restaurantID from context (nil for owners).
+func extractRestaurantIDHint(c *gin.Context) *primitive.ObjectID {
+	ridStr, ok := middleware.GetUserRestaurantID(c)
+	if !ok {
+		return nil
+	}
+	rid, err := primitive.ObjectIDFromHex(ridStr)
+	if err != nil {
+		return nil
+	}
+	return &rid
+}
+
+// extractBranchIDHint parses the employee's branchID from context (nil for owners).
+func extractBranchIDHint(c *gin.Context) *primitive.ObjectID {
+	bidStr, ok := middleware.GetUserBranchID(c)
+	if !ok {
+		return nil
+	}
+	bid, err := primitive.ObjectIDFromHex(bidStr)
+	if err != nil {
+		return nil
+	}
+	return &bid
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -73,6 +99,39 @@ func (h *Handler) Create(c *gin.Context) {
 	pkg.SuccessResponse(c, http.StatusCreated, "Request created successfully", request)
 }
 
+// GetVenueInfo handles retrieving public venue info from a scanned QR
+// @Summary Get public venue info for a table QR
+// @Tags requests
+// @Produce json
+// @Param r query string true "Restaurant ID"
+// @Param b query string true "Branch ID"
+// @Param t query string true "Table ID"
+// @Param n query int true "Table number"
+// @Param h query string true "QR hash"
+// @Success 200 {object} pkg.Response{data=domain.VenueInfo}
+// @Failure 400 {object} pkg.Response
+// @Failure 404 {object} pkg.Response
+// @Router /api/v1/public/venue-info [get]
+func (h *Handler) GetVenueInfo(c *gin.Context) {
+	var input domain.VenueInfoInput
+	if err := c.ShouldBindQuery(&input); err != nil {
+		pkg.BadRequestResponse(c, "Invalid input", err)
+		return
+	}
+
+	info, err := h.useCase.GetVenueInfo(c.Request.Context(), input)
+	if err != nil {
+		if errors.Is(err, pkg.ErrNotFound) {
+			pkg.NotFoundResponse(c, "Restaurant or branch not found", err)
+			return
+		}
+		pkg.BadRequestResponse(c, "Failed to get venue info", err)
+		return
+	}
+
+	pkg.SuccessResponse(c, http.StatusOK, "Venue info retrieved successfully", info)
+}
+
 // GetByID handles retrieving a request by ID
 // @Summary Get request by ID
 // @Tags requests
@@ -105,13 +164,13 @@ func (h *Handler) GetByID(c *gin.Context) {
 		return
 	}
 
-	request, err := h.useCase.GetByID(c.Request.Context(), requestID, userID)
+	request, err := h.useCase.GetByID(c.Request.Context(), requestID, userID, extractRestaurantIDHint(c))
 	if err != nil {
 		if errors.Is(err, pkg.ErrNotFound) {
 			pkg.NotFoundResponse(c, "Request not found", err)
 			return
 		}
-		if errors.Is(err, pkg.ErrUnauthorized) {
+		if errors.Is(err, pkg.ErrUnauthorized) || errors.Is(err, pkg.ErrForbidden) {
 			pkg.UnauthorizedResponse(c, "You don't have access to this request", err)
 			return
 		}
@@ -153,13 +212,13 @@ func (h *Handler) ListByRestaurant(c *gin.Context) {
 		return
 	}
 
-	requests, err := h.useCase.GetByRestaurantID(c.Request.Context(), restaurantID, userID)
+	requests, err := h.useCase.GetByRestaurantID(c.Request.Context(), restaurantID, userID, extractRestaurantIDHint(c), extractBranchIDHint(c))
 	if err != nil {
 		if errors.Is(err, pkg.ErrNotFound) {
 			pkg.NotFoundResponse(c, "Restaurant not found", err)
 			return
 		}
-		if errors.Is(err, pkg.ErrUnauthorized) {
+		if errors.Is(err, pkg.ErrUnauthorized) || errors.Is(err, pkg.ErrForbidden) {
 			pkg.UnauthorizedResponse(c, "You don't have access to this restaurant", err)
 			return
 		}
@@ -201,13 +260,13 @@ func (h *Handler) ListPendingByRestaurant(c *gin.Context) {
 		return
 	}
 
-	requests, err := h.useCase.GetPendingByRestaurantID(c.Request.Context(), restaurantID, userID)
+	requests, err := h.useCase.GetPendingByRestaurantID(c.Request.Context(), restaurantID, userID, extractRestaurantIDHint(c), extractBranchIDHint(c))
 	if err != nil {
 		if errors.Is(err, pkg.ErrNotFound) {
 			pkg.NotFoundResponse(c, "Restaurant not found", err)
 			return
 		}
-		if errors.Is(err, pkg.ErrUnauthorized) {
+		if errors.Is(err, pkg.ErrUnauthorized) || errors.Is(err, pkg.ErrForbidden) {
 			pkg.UnauthorizedResponse(c, "You don't have access to this restaurant", err)
 			return
 		}
@@ -258,13 +317,13 @@ func (h *Handler) UpdateStatus(c *gin.Context) {
 		return
 	}
 
-	request, err := h.useCase.UpdateStatus(c.Request.Context(), requestID, userID, input)
+	request, err := h.useCase.UpdateStatus(c.Request.Context(), requestID, userID, input, extractRestaurantIDHint(c))
 	if err != nil {
 		if errors.Is(err, pkg.ErrNotFound) {
 			pkg.NotFoundResponse(c, "Request not found", err)
 			return
 		}
-		if errors.Is(err, pkg.ErrUnauthorized) {
+		if errors.Is(err, pkg.ErrUnauthorized) || errors.Is(err, pkg.ErrForbidden) {
 			pkg.UnauthorizedResponse(c, "You don't have access to this request", err)
 			return
 		}
@@ -379,6 +438,7 @@ func (h *Handler) WebSocket(c *gin.Context) {
 func (h *Handler) RegisterRoutes(router *gin.RouterGroup, publicRouter *gin.RouterGroup) {
 	// Public routes (no authentication required)
 	publicRouter.POST("/request-account", h.Create)
+	publicRouter.GET("/venue-info", h.GetVenueInfo)
 
 	// Protected routes (authentication required)
 	requests := router.Group("/requests")

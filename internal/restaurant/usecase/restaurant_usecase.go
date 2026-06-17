@@ -17,7 +17,7 @@ import (
 // UseCase defines the interface for restaurant use cases
 type UseCase interface {
 	Create(ctx context.Context, userID primitive.ObjectID, input domain.CreateRestaurantInput) (*domain.Restaurant, error)
-	GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) (*domain.Restaurant, error)
+	GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID) (*domain.Restaurant, error)
 	GetByUserID(ctx context.Context, userID primitive.ObjectID) ([]*domain.Restaurant, error)
 	Update(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, input domain.UpdateRestaurantInput) (*domain.Restaurant, error)
 	Delete(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) error
@@ -57,28 +57,28 @@ func (uc *restaurantUseCase) Create(ctx context.Context, userID primitive.Object
 	return restaurant, nil
 }
 
-// startTrial creates a trialing subscription using the Inicial plan
+// startTrial creates a trialing subscription using the Basic plan
 func (uc *restaurantUseCase) startTrial(ctx context.Context, userID, restaurantID primitive.ObjectID) error {
 	plans, err := uc.planRepo.FindAll(ctx)
 	if err != nil {
 		return err
 	}
 
-	var inicialPlan *subscriptionDomain.Plan
+	var basicPlan *subscriptionDomain.Plan
 	for _, p := range plans {
-		if p.Name == subscriptionDomain.PlanNameInicial {
-			inicialPlan = p
+		if p.Name == subscriptionDomain.PlanNameBasico {
+			basicPlan = p
 			break
 		}
 	}
-	if inicialPlan == nil {
+	if basicPlan == nil {
 		return pkg.ErrNotFound
 	}
 
-	subscription := subscriptionDomain.NewSubscription(userID, restaurantID, inicialPlan.ID, subscriptionDomain.SubscriptionStatusTrialing)
+	subscription := subscriptionDomain.NewSubscription(userID, restaurantID, basicPlan.ID, subscriptionDomain.SubscriptionStatusTrialing)
 
 	now := time.Now()
-	trialEnds := now.AddDate(0, 0, inicialPlan.TrialDays)
+	trialEnds := now.AddDate(0, 0, basicPlan.TrialDays)
 	subscription.TrialStartedAt = &now
 	subscription.TrialEndsAt = &trialEnds
 
@@ -86,18 +86,32 @@ func (uc *restaurantUseCase) startTrial(ctx context.Context, userID, restaurantI
 }
 
 // GetByID retrieves a restaurant by ID
-func (uc *restaurantUseCase) GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) (*domain.Restaurant, error) {
+func (uc *restaurantUseCase) GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID) (*domain.Restaurant, error) {
 	restaurant, err := uc.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	// Verify ownership
-	if restaurant.UserID != userID {
-		return nil, pkg.ErrUnauthorized
+	if err := authorizeRestaurantAccess(restaurant.ID, restaurant.UserID, userID, restaurantIDHint); err != nil {
+		return nil, err
 	}
 
 	return restaurant, nil
+}
+
+// authorizeRestaurantAccess checks whether the caller can access the given restaurant.
+// Employees carry their restaurantID in the JWT (hint); owners are matched by UserID.
+func authorizeRestaurantAccess(restaurantID, ownerUserID, callerUserID primitive.ObjectID, hint *primitive.ObjectID) error {
+	if hint != nil {
+		if restaurantID != *hint {
+			return pkg.ErrForbidden
+		}
+		return nil
+	}
+	if ownerUserID != callerUserID {
+		return pkg.ErrUnauthorized
+	}
+	return nil
 }
 
 // GetByUserID retrieves all restaurants for a user
