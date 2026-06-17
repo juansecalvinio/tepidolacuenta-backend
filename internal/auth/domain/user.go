@@ -21,6 +21,7 @@ type User struct {
 	GoogleID            string              `json:"-" bson:"google_id,omitempty"`
 	Role                Role                `json:"role" bson:"role"`
 	RestaurantID        *primitive.ObjectID `json:"restaurantId,omitempty" bson:"restaurant_id,omitempty"`
+	BranchID            *primitive.ObjectID `json:"branchId,omitempty" bson:"branch_id,omitempty"`
 	ResetPasswordToken  string              `json:"-" bson:"reset_password_token,omitempty"`
 	ResetPasswordExpiry time.Time           `json:"-" bson:"reset_password_expiry,omitempty"`
 	CreatedAt           time.Time           `json:"createdAt" bson:"created_at"`
@@ -108,14 +109,15 @@ func NewGoogleUser(email, googleID string) *User {
 	}
 }
 
-// NewEmployeeUser creates a new employee user linked to a restaurant via invitation
-func NewEmployeeUser(email, password string, restaurantID primitive.ObjectID) *User {
+// NewEmployeeUser creates a new employee user linked to a restaurant branch via invitation
+func NewEmployeeUser(email, password string, restaurantID, branchID primitive.ObjectID) *User {
 	now := time.Now()
 	return &User{
 		Email:        email,
 		Password:     password,
 		Role:         RoleEmployee,
 		RestaurantID: &restaurantID,
+		BranchID:     &branchID,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}

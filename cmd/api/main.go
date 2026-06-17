@@ -119,9 +119,12 @@ func main() {
 	restaurantService := restaurantUseCase.NewRestaurantUseCase(restaurantRepository, planRepository, subscriptionRepository)
 	restaurantHdlr := restaurantHandler.NewRestaurantHandler(restaurantService)
 
+	// Branch repository (needed early by the invitation usecase for branch-scoped codes)
+	branchRepository := branchRepo.NewMongoRepository(db.Database)
+
 	// Initialize Invitation module
 	invitationRepository := invitationRepo.NewMongoRepository(db.Database)
-	invitationService := invitationUseCase.NewInvitationUseCase(invitationRepository, restaurantRepository)
+	invitationService := invitationUseCase.NewInvitationUseCase(invitationRepository, restaurantRepository, branchRepository)
 
 	// Initialize Auth module
 	authRepository := authRepo.NewMongoRepository(db.Database)
@@ -130,8 +133,7 @@ func main() {
 
 	invitationHdlr := invitationHandler.NewInvitationHandler(invitationService, authService)
 
-	// Initialize Branch module
-	branchRepository := branchRepo.NewMongoRepository(db.Database)
+	// Initialize Branch module (branchRepository created earlier)
 	branchService := branchUseCase.NewBranchUseCase(branchRepository, restaurantRepository, subscriptionRepository, planRepository)
 	branchHdlr := branchHandler.NewBranchHandler(branchService)
 

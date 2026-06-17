@@ -28,6 +28,19 @@ func extractRestaurantIDHint(c *gin.Context) *primitive.ObjectID {
 	return &rid
 }
 
+// extractBranchIDHint parses the employee's branchID from context (nil for owners).
+func extractBranchIDHint(c *gin.Context) *primitive.ObjectID {
+	bidStr, ok := middleware.GetUserBranchID(c)
+	if !ok {
+		return nil
+	}
+	bid, err := primitive.ObjectIDFromHex(bidStr)
+	if err != nil {
+		return nil
+	}
+	return &bid
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -199,7 +212,7 @@ func (h *Handler) ListByRestaurant(c *gin.Context) {
 		return
 	}
 
-	requests, err := h.useCase.GetByRestaurantID(c.Request.Context(), restaurantID, userID, extractRestaurantIDHint(c))
+	requests, err := h.useCase.GetByRestaurantID(c.Request.Context(), restaurantID, userID, extractRestaurantIDHint(c), extractBranchIDHint(c))
 	if err != nil {
 		if errors.Is(err, pkg.ErrNotFound) {
 			pkg.NotFoundResponse(c, "Restaurant not found", err)
@@ -247,7 +260,7 @@ func (h *Handler) ListPendingByRestaurant(c *gin.Context) {
 		return
 	}
 
-	requests, err := h.useCase.GetPendingByRestaurantID(c.Request.Context(), restaurantID, userID, extractRestaurantIDHint(c))
+	requests, err := h.useCase.GetPendingByRestaurantID(c.Request.Context(), restaurantID, userID, extractRestaurantIDHint(c), extractBranchIDHint(c))
 	if err != nil {
 		if errors.Is(err, pkg.ErrNotFound) {
 			pkg.NotFoundResponse(c, "Restaurant not found", err)

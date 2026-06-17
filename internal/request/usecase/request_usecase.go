@@ -19,8 +19,8 @@ type UseCase interface {
 	Create(ctx context.Context, input domain.CreateRequestInput) (*domain.Request, error)
 	GetVenueInfo(ctx context.Context, input domain.VenueInfoInput) (*domain.VenueInfo, error)
 	GetByID(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID) (*domain.Request, error)
-	GetByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID) ([]*domain.Request, error)
-	GetPendingByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID) ([]*domain.Request, error)
+	GetByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID, branchIDHint *primitive.ObjectID) ([]*domain.Request, error)
+	GetPendingByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID, branchIDHint *primitive.ObjectID) ([]*domain.Request, error)
 	UpdateStatus(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, input domain.UpdateRequestStatusInput, restaurantIDHint *primitive.ObjectID) (*domain.Request, error)
 	Delete(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) error
 }
@@ -212,8 +212,9 @@ func (uc *requestUseCase) GetByID(ctx context.Context, id primitive.ObjectID, us
 	return request, nil
 }
 
-// GetByRestaurantID retrieves all requests for a restaurant
-func (uc *requestUseCase) GetByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID) ([]*domain.Request, error) {
+// GetByRestaurantID retrieves all requests for a restaurant.
+// Branch-scoped employees only get the requests of their branch.
+func (uc *requestUseCase) GetByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID, branchIDHint *primitive.ObjectID) ([]*domain.Request, error) {
 	restaurant, err := uc.restaurantRepo.FindByID(ctx, restaurantID)
 	if err != nil {
 		return nil, err
@@ -223,11 +224,15 @@ func (uc *requestUseCase) GetByRestaurantID(ctx context.Context, restaurantID pr
 		return nil, err
 	}
 
+	if branchIDHint != nil {
+		return uc.repo.FindByBranchID(ctx, *branchIDHint)
+	}
 	return uc.repo.FindByRestaurantID(ctx, restaurantID)
 }
 
-// GetPendingByRestaurantID retrieves all pending requests for a restaurant
-func (uc *requestUseCase) GetPendingByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID) ([]*domain.Request, error) {
+// GetPendingByRestaurantID retrieves all pending requests for a restaurant.
+// Branch-scoped employees only get the pending requests of their branch.
+func (uc *requestUseCase) GetPendingByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID, restaurantIDHint *primitive.ObjectID, branchIDHint *primitive.ObjectID) ([]*domain.Request, error) {
 	restaurant, err := uc.restaurantRepo.FindByID(ctx, restaurantID)
 	if err != nil {
 		return nil, err
@@ -237,6 +242,9 @@ func (uc *requestUseCase) GetPendingByRestaurantID(ctx context.Context, restaura
 		return nil, err
 	}
 
+	if branchIDHint != nil {
+		return uc.repo.FindPendingByBranchID(ctx, *branchIDHint)
+	}
 	return uc.repo.FindPendingByRestaurantID(ctx, restaurantID)
 }
 

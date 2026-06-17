@@ -107,7 +107,11 @@ func (uc *authUseCase) Login(ctx context.Context, input domain.LoginInput) (*dom
 	if user.RestaurantID != nil {
 		restaurantID = user.RestaurantID.Hex()
 	}
-	token, err := uc.jwtService.GenerateToken(user.ID, user.Email, string(user.Role), restaurantID)
+	branchID := ""
+	if user.BranchID != nil {
+		branchID = user.BranchID.Hex()
+	}
+	token, err := uc.jwtService.GenerateToken(user.ID, user.Email, string(user.Role), restaurantID, branchID)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +137,7 @@ func (uc *authUseCase) RegisterEmployee(ctx context.Context, input domain.Employ
 		return nil, err
 	}
 
-	user := domain.NewEmployeeUser(input.Email, input.Password, inv.RestaurantID)
+	user := domain.NewEmployeeUser(input.Email, input.Password, inv.RestaurantID, inv.BranchID)
 	if err := user.HashPassword(); err != nil {
 		return nil, err
 	}
@@ -142,7 +146,7 @@ func (uc *authUseCase) RegisterEmployee(ctx context.Context, input domain.Employ
 		return nil, err
 	}
 
-	token, err := uc.jwtService.GenerateToken(user.ID, user.Email, string(domain.RoleEmployee), inv.RestaurantID.Hex())
+	token, err := uc.jwtService.GenerateToken(user.ID, user.Email, string(domain.RoleEmployee), inv.RestaurantID.Hex(), inv.BranchID.Hex())
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +227,7 @@ func (uc *authUseCase) HandleGoogleCallback(ctx context.Context, code string) (*
 		return nil, err
 	}
 
-	jwtToken, err := uc.jwtService.GenerateToken(user.ID, user.Email, string(domain.RoleOwner), "")
+	jwtToken, err := uc.jwtService.GenerateToken(user.ID, user.Email, string(domain.RoleOwner), "", "")
 	if err != nil {
 		return nil, err
 	}
@@ -307,7 +311,7 @@ func (uc *authUseCase) AcceptInvitation(ctx context.Context, userID primitive.Ob
 		return nil, err
 	}
 
-	if err := uc.repo.UpdateRoleAndRestaurant(ctx, userID, domain.RoleEmployee, inv.RestaurantID); err != nil {
+	if err := uc.repo.UpdateRoleAndRestaurant(ctx, userID, domain.RoleEmployee, inv.RestaurantID, inv.BranchID); err != nil {
 		return nil, err
 	}
 
@@ -316,7 +320,7 @@ func (uc *authUseCase) AcceptInvitation(ctx context.Context, userID primitive.Ob
 		return nil, err
 	}
 
-	token, err := uc.jwtService.GenerateToken(user.ID, user.Email, string(domain.RoleEmployee), inv.RestaurantID.Hex())
+	token, err := uc.jwtService.GenerateToken(user.ID, user.Email, string(domain.RoleEmployee), inv.RestaurantID.Hex(), inv.BranchID.Hex())
 	if err != nil {
 		return nil, err
 	}

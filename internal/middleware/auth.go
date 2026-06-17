@@ -15,6 +15,7 @@ const (
 	userEmailKey        = "userEmail"
 	userRoleKey         = "userRole"
 	userRestaurantIDKey = "userRestaurantID"
+	userBranchIDKey     = "userBranchID"
 )
 
 // AuthMiddleware creates a middleware for JWT authentication
@@ -56,6 +57,7 @@ func AuthMiddleware(jwtService *pkg.JWTService) gin.HandlerFunc {
 		c.Set(userEmailKey, claims.Email)
 		c.Set(userRoleKey, claims.Role)
 		c.Set(userRestaurantIDKey, claims.RestaurantID)
+		c.Set(userBranchIDKey, claims.BranchID)
 
 		c.Next()
 	}
@@ -91,6 +93,16 @@ func GetUserRole(c *gin.Context) (string, bool) {
 // GetUserRestaurantID gets the restaurant ID from the context (only set for employees)
 func GetUserRestaurantID(c *gin.Context) (string, bool) {
 	id, exists := c.Get(userRestaurantIDKey)
+	if !exists {
+		return "", false
+	}
+	v, ok := id.(string)
+	return v, ok && v != ""
+}
+
+// GetUserBranchID gets the branch ID from the context (only set for employees)
+func GetUserBranchID(c *gin.Context) (string, bool) {
+	id, exists := c.Get(userBranchIDKey)
 	if !exists {
 		return "", false
 	}

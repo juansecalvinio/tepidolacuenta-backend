@@ -49,7 +49,13 @@ func (h *Handler) GenerateCode(c *gin.Context) {
 		return
 	}
 
-	resp, err := h.useCase.Generate(c.Request.Context(), userID, restaurantID)
+	branchID, err := primitive.ObjectIDFromHex(input.BranchID)
+	if err != nil {
+		pkg.BadRequestResponse(c, "Invalid branch ID", err)
+		return
+	}
+
+	resp, err := h.useCase.Generate(c.Request.Context(), userID, restaurantID, branchID)
 	if err != nil {
 		if errors.Is(err, pkg.ErrUnauthorized) {
 			pkg.UnauthorizedResponse(c, "You don't own this restaurant", err)

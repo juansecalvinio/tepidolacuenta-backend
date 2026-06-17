@@ -9,6 +9,7 @@ import (
 type Invitation struct {
 	ID           primitive.ObjectID `json:"id" bson:"_id,omitempty"`
 	RestaurantID primitive.ObjectID `json:"restaurantId" bson:"restaurant_id"`
+	BranchID     primitive.ObjectID `json:"branchId" bson:"branch_id"`
 	Code         string             `json:"code" bson:"code"`
 	ExpiresAt    time.Time          `json:"expiresAt" bson:"expires_at"`
 	Used         bool               `json:"used" bson:"used"`
@@ -17,6 +18,7 @@ type Invitation struct {
 
 type GenerateInvitationInput struct {
 	RestaurantID string `json:"restaurantId" binding:"required"`
+	BranchID     string `json:"branchId" binding:"required"`
 }
 
 type AcceptInvitationInput struct {
@@ -28,10 +30,11 @@ type GenerateInvitationResponse struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
-func NewInvitation(restaurantID primitive.ObjectID, code string) *Invitation {
+func NewInvitation(restaurantID, branchID primitive.ObjectID, code string) *Invitation {
 	now := time.Now()
 	return &Invitation{
 		RestaurantID: restaurantID,
+		BranchID:     branchID,
 		Code:         code,
 		ExpiresAt:    now.Add(7 * 24 * time.Hour),
 		Used:         false,
