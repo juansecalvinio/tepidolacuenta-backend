@@ -100,7 +100,7 @@ func (uc *tableUseCase) Create(ctx context.Context, userID primitive.ObjectID, i
 	}
 
 	// Validate plan table limit (adding 1 table)
-	if err := uc.checkTablePlanLimit(ctx, *restaurantID, 1); err != nil {
+	if err := uc.checkTablePlanLimit(ctx, *restaurantID, branchID, 1); err != nil {
 		return nil, err
 	}
 
@@ -149,7 +149,7 @@ func (uc *tableUseCase) BulkCreate(ctx context.Context, userID primitive.ObjectI
 	}
 
 	// Validate plan table limit (adding input.Count tables)
-	if err := uc.checkTablePlanLimit(ctx, *restaurantID, input.Count); err != nil {
+	if err := uc.checkTablePlanLimit(ctx, *restaurantID, branchID, input.Count); err != nil {
 		return nil, err
 	}
 
@@ -292,7 +292,7 @@ func (uc *tableUseCase) Delete(ctx context.Context, id primitive.ObjectID, userI
 }
 
 // checkTablePlanLimit verifies the restaurant's plan allows adding `count` more tables across all its branches
-func (uc *tableUseCase) checkTablePlanLimit(ctx context.Context, restaurantID primitive.ObjectID, count int) error {
+func (uc *tableUseCase) checkTablePlanLimit(ctx context.Context, restaurantID, branchID primitive.ObjectID, count int) error {
 	subscription, err := uc.subscriptionRepo.FindByRestaurantID(ctx, restaurantID)
 	if err != nil {
 		return pkg.ErrPlanLimitReached
@@ -308,22 +308,13 @@ func (uc *tableUseCase) checkTablePlanLimit(ctx context.Context, restaurantID pr
 		return nil
 	}
 
-	// Count all existing tables across all branches of the restaurant
-	branches, err := uc.branchRepo.FindByRestaurantID(ctx, restaurantID)
+	// El límite del plan aplica POR SUCURSAL: contamos solo las mesas de esta sucursal.
+	tables, err := uc.repo.FindByBranchID(ctx, branchID)
 	if err != nil {
 		return err
 	}
 
-	totalTables := 0
-	for _, branch := range branches {
-		tables, err := uc.repo.FindByBranchID(ctx, branch.ID)
-		if err != nil {
-			return err
-		}
-		totalTables += len(tables)
-	}
-
-	if totalTables+count > plan.MaxTables {
+	if len(tables)+count > plan.MaxTables {
 		return pkg.ErrPlanLimitReached
 	}
 
