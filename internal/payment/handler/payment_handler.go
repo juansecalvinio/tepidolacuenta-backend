@@ -11,6 +11,7 @@ import (
 	"juansecalvinio/tepidolacuenta/internal/payment/usecase"
 	"juansecalvinio/tepidolacuenta/internal/pkg"
 
+	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -66,6 +67,11 @@ func (h *Handler) CreatePreference(c *gin.Context) {
 
 // ProcessWebhook handles POST /api/v1/payments/webhook (no auth — called by MercadoPago)
 func (h *Handler) ProcessWebhook(c *gin.Context) {
+	// Marcamos el área para poder filtrar/alertar por problemas de pago en Sentry.
+	if hub := sentrygin.GetHubFromContext(c); hub != nil {
+		hub.Scope().SetTag("area", "payment")
+	}
+
 	xSignature := c.GetHeader("x-signature")
 	xRequestID := c.GetHeader("x-request-id")
 
