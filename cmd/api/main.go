@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	config "juansecalvinio/tepidolacuenta/config"
@@ -71,12 +72,28 @@ func main() {
 	// Initialize Sentry
 	if cfg.SentryDSN != "" {
 		if err := sentry.Init(sentry.ClientOptions{
-			Dsn:              cfg.SentryDSN,
-			Environment:      cfg.SentryEnvironment,
-			Release:          cfg.SentryRelease,
-			EnableTracing:    true,
-			TracesSampleRate: 1.0,
-			EnableLogs:       true,
+			Dsn:           cfg.SentryDSN,
+			Environment:   cfg.SentryEnvironment,
+			Release:       cfg.SentryRelease,
+			EnableTracing: true,
+			// Sampling: 100% de pagos, respeta la decisión que llega del front
+			// (consistencia de la traza), y el resto al 10% para cuidar la cuota.
+			// Los errores se capturan siempre (no se ven afectados por esto).
+			TracesSampler: sentry.TracesSampler(func(ctx sentry.SamplingContext) float64 {
+				if ctx.Span != nil {
+					switch ctx.Span.Sampled {
+					case sentry.SampledTrue:
+						return 1.0
+					case sentry.SampledFalse:
+						return 0.0
+					}
+					if strings.Contains(strings.ToLower(ctx.Span.Name), "payment") {
+						return 1.0
+					}
+				}
+				return 0.1
+			}),
+			EnableLogs: true,
 		}); err != nil {
 			log.Printf("Sentry initialization failed: %v", err)
 		} else {
@@ -221,8 +238,23 @@ func main() {
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
+		// Readiness: chequea conectividad real con MongoDB (no solo "el proceso vive"),
+		// así el monitor de uptime refleja si el backend puede operar.
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 2*time.Second)
+		defer cancel()
+
+		if err := db.Client.Ping(ctx, nil); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status": "degraded",
+				"db":     "down",
+				"time":   time.Now(),
+			})
+			return
+		}
+
 		c.JSON(http.StatusOK, gin.H{
 			"status": "ok",
+			"db":     "ok",
 			"time":   time.Now(),
 		})
 	})
