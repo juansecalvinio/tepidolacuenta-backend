@@ -72,6 +72,8 @@ func main() {
 	if cfg.SentryDSN != "" {
 		if err := sentry.Init(sentry.ClientOptions{
 			Dsn:              cfg.SentryDSN,
+			Environment:      cfg.SentryEnvironment,
+			Release:          cfg.SentryRelease,
 			EnableTracing:    true,
 			TracesSampleRate: 1.0,
 			EnableLogs:       true,
@@ -209,7 +211,7 @@ func main() {
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORSAllowedOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept", "X-Requested-With"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "Accept", "X-Requested-With", "sentry-trace", "baggage"},
 		ExposeHeaders:    []string{"Content-Length", "Content-Type"},
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
@@ -238,6 +240,7 @@ func main() {
 		// Protected routes (require authentication)
 		protected := v1.Group("")
 		protected.Use(middleware.AuthMiddleware(jwtService))
+		protected.Use(middleware.SentryContext())
 		{
 			// Restaurant routes
 			restaurantHdlr.RegisterRoutes(protected)

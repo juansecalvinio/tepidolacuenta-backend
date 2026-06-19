@@ -23,6 +23,8 @@ type Config struct {
 	GoogleClientSecret          string
 	GoogleRedirectURL           string
 	SentryDSN                   string
+	SentryEnvironment           string
+	SentryRelease               string
 	MercadoPagoAccessToken      string
 	MercadoPagoWebhookSecret    string
 	MercadoPagoNotificationURL  string
@@ -55,6 +57,8 @@ func Load() (*Config, error) {
 		GoogleClientSecret:         getEnv("GOOGLE_CLIENT_SECRET", ""),
 		GoogleRedirectURL:          getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/api/v1/auth/google/callback"),
 		SentryDSN:                  getEnv("SENTRY_DSN", ""),
+		SentryEnvironment:          getEnv("SENTRY_ENVIRONMENT", "production"),
+		SentryRelease:              getEnv("SENTRY_RELEASE", ""),
 		MercadoPagoAccessToken:     getEnv("MERCADOPAGO_ACCESS_TOKEN", ""),
 		MercadoPagoWebhookSecret:   getEnv("MERCADOPAGO_WEBHOOK_SECRET", ""),
 		MercadoPagoNotificationURL: getEnv("MERCADOPAGO_NOTIFICATION_URL", ""),

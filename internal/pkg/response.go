@@ -3,6 +3,7 @@ package pkg
 import (
 	"net/http"
 
+	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
 )
 
@@ -51,5 +52,12 @@ func ForbiddenResponse(c *gin.Context, message string, err error) {
 }
 
 func InternalServerErrorResponse(c *gin.Context, message string, err error) {
+	// Reportamos a Sentry todo error de servidor (5xx), con el contexto del
+	// request (usuario / local / rol que setea el middleware SentryContext).
+	if err != nil {
+		if hub := sentrygin.GetHubFromContext(c); hub != nil {
+			hub.CaptureException(err)
+		}
+	}
 	ErrorResponse(c, http.StatusInternalServerError, message, err)
 }
