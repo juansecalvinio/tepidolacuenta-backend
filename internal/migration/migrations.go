@@ -58,6 +58,10 @@ func All() []Migration {
 			Name: "011_update_plan_prices",
 			Run:  updatePlanPrices,
 		},
+		{
+			Name: "012_reset_all_data",
+			Run:  resetAllData,
+		},
 	}
 }
 
@@ -182,6 +186,31 @@ func createInvitationsIndex(ctx context.Context, db *mongo.Database) error {
 // cleanCollections drops the branches, users, restaurants, tables and requests collections
 func cleanCollections(ctx context.Context, db *mongo.Database) error {
 	collections := []string{"branches", "users", "restaurants", "tables", "requests", "plans"}
+	for _, name := range collections {
+		if err := db.Collection(name).Drop(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// resetAllData drops every data collection to leave the database clean for testing
+// from scratch. It includes the newer collections (invitations, subscriptions,
+// payments) that cleanCollections doesn't, so no orphan documents survive.
+// "plans" is dropped too and re-seeded by seedPlans after migrations run.
+// "migrations" is intentionally preserved — it's the runner's tracking table.
+func resetAllData(ctx context.Context, db *mongo.Database) error {
+	collections := []string{
+		"branches",
+		"users",
+		"restaurants",
+		"tables",
+		"requests",
+		"invitations",
+		"subscriptions",
+		"payments",
+		"plans",
+	}
 	for _, name := range collections {
 		if err := db.Collection(name).Drop(ctx); err != nil {
 			return err
