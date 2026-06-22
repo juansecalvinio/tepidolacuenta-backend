@@ -103,7 +103,7 @@ func main() {
 	}
 
 	// Initialize MongoDB
-	db, err := database.NewMongoDB(cfg.MongoURI, "tepidolacuenta")
+	db, err := database.NewMongoDB(cfg.MongoURI, cfg.MongoDatabase)
 	if err != nil {
 		log.Fatalf("Failed to initialize MongoDB: %v", err)
 	}
