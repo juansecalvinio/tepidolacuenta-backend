@@ -22,6 +22,7 @@ type Payment struct {
 	MPPreferenceID string             `json:"mpPreferenceId" bson:"mp_preference_id"`
 	MPPaymentID    string             `json:"mpPaymentId,omitempty" bson:"mp_payment_id,omitempty"`
 	Amount         float64            `json:"amount" bson:"amount"`
+	Branches       int                `json:"branches" bson:"branches"`
 	Status         string             `json:"status" bson:"status"`
 	CreatedAt      time.Time          `json:"createdAt" bson:"created_at"`
 	UpdatedAt      time.Time          `json:"updatedAt" bson:"updated_at"`
@@ -31,6 +32,8 @@ type Payment struct {
 type CreatePreferenceInput struct {
 	PlanID       string `json:"planId" binding:"required"`
 	RestaurantID string `json:"restaurantId" binding:"required"`
+	Cycle        string `json:"cycle" binding:"omitempty,oneof=monthly annual"`
+	Branches     int    `json:"branches" binding:"omitempty,min=1"`
 }
 
 // WebhookBody represents the payload MercadoPago sends to the webhook endpoint
@@ -56,7 +59,7 @@ func NewPaymentApprovedEvent(payment *Payment) *PaymentEvent {
 	}
 }
 
-func NewPayment(userID, restaurantID, planID primitive.ObjectID, mpPreferenceID string, amount float64) *Payment {
+func NewPayment(userID, restaurantID, planID primitive.ObjectID, mpPreferenceID string, amount float64, branches int) *Payment {
 	now := time.Now()
 	return &Payment{
 		UserID:         userID,
@@ -64,6 +67,7 @@ func NewPayment(userID, restaurantID, planID primitive.ObjectID, mpPreferenceID 
 		PlanID:         planID,
 		MPPreferenceID: mpPreferenceID,
 		Amount:         amount,
+		Branches:       branches,
 		Status:         PaymentStatusPending,
 		CreatedAt:      now,
 		UpdatedAt:      now,

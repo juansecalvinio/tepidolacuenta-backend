@@ -104,6 +104,7 @@ func (uc *subscriptionUseCase) Create(ctx context.Context, userID primitive.Obje
 
 	subscription := domain.NewSubscription(userID, restaurantID, planID, status)
 	subscription.PaymentSubscriptionID = input.PaymentSubscriptionID
+	subscription.PurchasedBranches = plan.IncludedBranches
 
 	// Set trial period using the plan's configured trial days
 	if input.StartTrial && plan.TrialDays > 0 {
