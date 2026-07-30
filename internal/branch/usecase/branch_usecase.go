@@ -9,7 +9,6 @@ import (
 	"juansecalvinio/tepidolacuenta/internal/pkg"
 	restaurantRepo "juansecalvinio/tepidolacuenta/internal/restaurant/repository"
 	subscriptionRepo "juansecalvinio/tepidolacuenta/internal/subscription/repository"
-	subscriptionDomain "juansecalvinio/tepidolacuenta/internal/subscription/domain"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -194,14 +193,11 @@ func (uc *branchUseCase) checkBranchPlanLimit(ctx context.Context, restaurantID 
 		return pkg.ErrPlanLimitReached
 	}
 
-	plan, err := uc.planRepo.FindByID(ctx, subscription.PlanID)
-	if err != nil {
-		return err
-	}
-
-	// Unlimited branches
-	if plan.MaxBranches == subscriptionDomain.Unlimited {
-		return nil
+	// El límite es lo que la suscripción pagó (base incluida + extras compradas).
+	limit := subscription.PurchasedBranches
+	if limit <= 0 {
+		// Defensa: una suscripción sin cupo registrado no habilita sucursales.
+		return pkg.ErrPlanLimitReached
 	}
 
 	existing, err := uc.repo.FindByRestaurantID(ctx, restaurantID)
@@ -209,7 +205,7 @@ func (uc *branchUseCase) checkBranchPlanLimit(ctx context.Context, restaurantID 
 		return err
 	}
 
-	if len(existing) >= plan.MaxBranches {
+	if len(existing) >= limit {
 		return pkg.ErrPlanLimitReached
 	}
 

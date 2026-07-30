@@ -64,21 +64,22 @@ func (uc *restaurantUseCase) startTrial(ctx context.Context, userID, restaurantI
 		return err
 	}
 
-	var basicPlan *subscriptionDomain.Plan
+	var entryPlan *subscriptionDomain.Plan
 	for _, p := range plans {
-		if p.Name == subscriptionDomain.PlanNameBasico {
-			basicPlan = p
+		if p.Name == subscriptionDomain.PlanNameStarter {
+			entryPlan = p
 			break
 		}
 	}
-	if basicPlan == nil {
+	if entryPlan == nil {
 		return pkg.ErrNotFound
 	}
 
-	subscription := subscriptionDomain.NewSubscription(userID, restaurantID, basicPlan.ID, subscriptionDomain.SubscriptionStatusTrialing)
+	subscription := subscriptionDomain.NewSubscription(userID, restaurantID, entryPlan.ID, subscriptionDomain.SubscriptionStatusTrialing)
+	subscription.PurchasedBranches = entryPlan.IncludedBranches
 
 	now := time.Now()
-	trialEnds := now.AddDate(0, 0, basicPlan.TrialDays)
+	trialEnds := now.AddDate(0, 0, entryPlan.TrialDays)
 	subscription.TrialStartedAt = &now
 	subscription.TrialEndsAt = &trialEnds
 

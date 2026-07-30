@@ -90,16 +90,31 @@ func (uc *paymentUseCase) CreatePaymentPreference(ctx context.Context, userID pr
 		return nil, err
 	}
 
+	// Ciclo de facturación: mensual por defecto; anual usa el precio anual.
+	cycle := input.Cycle
+	if cycle == "" {
+		cycle = "monthly"
+	}
+
+	// Cantidad de sucursales a cobrar. Sólo Business admite extras; para el resto
+	// se fuerza al cupo incluido. Nunca por debajo del incluido.
+	branches := plan.IncludedBranches
+	if plan.SupportsBranchAddon() && input.Branches > plan.IncludedBranches {
+		branches = input.Branches
+	}
+
+	amount := plan.PriceForBranches(cycle, branches)
+
 	// Save pending payment first to get the MongoDB ID for external_reference
-	payment := domain.NewPayment(userID, restaurantID, planID, "", plan.Price)
+	payment := domain.NewPayment(userID, restaurantID, planID, "", amount, branches)
 	if err := uc.paymentRepo.Create(ctx, payment); err != nil {
 		return nil, err
 	}
 
 	prefResp, err := uc.mp.CreatePreference(ctx, mpClient.PreferenceRequest{
-		Title:             fmt.Sprintf("Plan %s - TePidoLaCuenta", plan.Name),
+		Title:             fmt.Sprintf("Plan %s — %d sucursal(es) (%s) - TePidoLaCuenta", plan.Name, branches, cycle),
 		Quantity:          1,
-		UnitPrice:         plan.Price,
+		UnitPrice:         amount,
 		ExternalReference: payment.ID.Hex(),
 		NotificationURL:   uc.notificationURL,
 		BackURLSuccess:    uc.frontendURL + "/payment/success",
@@ -266,6 +281,7 @@ func (uc *paymentUseCase) activateSubscription(ctx context.Context, payment *dom
 		existing.PlanID = payment.PlanID
 		existing.Status = subscriptionDomain.SubscriptionStatusActive
 		existing.PaymentSubscriptionID = payment.MPPaymentID
+		existing.PurchasedBranches = payment.Branches
 		return uc.subscriptionRepo.Update(ctx, existing)
 	}
 
@@ -276,6 +292,7 @@ func (uc *paymentUseCase) activateSubscription(ctx context.Context, payment *dom
 		subscriptionDomain.SubscriptionStatusActive,
 	)
 	subscription.PaymentSubscriptionID = payment.MPPaymentID
+	subscription.PurchasedBranches = payment.Branches
 
 	return uc.subscriptionRepo.Create(ctx, subscription)
 }
