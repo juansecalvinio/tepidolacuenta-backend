@@ -103,7 +103,7 @@ func main() {
 	}
 
 	// Initialize MongoDB
-	db, err := database.NewMongoDB(cfg.MongoURI, "tepidolacuenta")
+	db, err := database.NewMongoDB(cfg.MongoURI, cfg.MongoDatabase)
 	if err != nil {
 		log.Fatalf("Failed to initialize MongoDB: %v", err)
 	}
@@ -322,9 +322,27 @@ func seedPlans(ctx context.Context, repo subscriptionRepo.PlanRepository) error 
 	}
 
 	plans := []*subscriptionDomain.Plan{
-		subscriptionDomain.NewPlan(subscriptionDomain.PlanNameBasico, 19999, 20, 1, 30),
-		subscriptionDomain.NewPlan(subscriptionDomain.PlanNameIntermedio, 49999, 50, 3, 30),
-		subscriptionDomain.NewPlan(subscriptionDomain.PlanNameProfesional, 99999, subscriptionDomain.Unlimited, subscriptionDomain.Unlimited, 30),
+		subscriptionDomain.NewPlan(
+			subscriptionDomain.PlanNameStarter,
+			28500, 285000, 19, // price, priceAnnual, priceUSD
+			0, 0, // extraBranchPrice, extraBranchPriceUSD (sin add-on)
+			25, 1, 1, 30, // maxTables, includedBranches, maxBranches, trialDays
+			subscriptionDomain.ReportsTierNone,
+		),
+		subscriptionDomain.NewPlan(
+			subscriptionDomain.PlanNamePro,
+			73500, 735000, 49,
+			0, 0,
+			40, 3, 3, 30,
+			subscriptionDomain.ReportsTierIncluded,
+		),
+		subscriptionDomain.NewPlan(
+			subscriptionDomain.PlanNameBusiness,
+			118500, 1185000, 79,
+			13500, 9, // extra: 13500 ARS / US$9 por sucursal
+			subscriptionDomain.Unlimited, 5, subscriptionDomain.Unlimited, 30, // mesas ilim, incluye 5, sin tope
+			subscriptionDomain.ReportsTierAdvanced,
+		),
 	}
 
 	for _, plan := range plans {

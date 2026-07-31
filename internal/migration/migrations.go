@@ -62,6 +62,14 @@ func All() []Migration {
 			Name: "012_reset_all_data",
 			Run:  resetAllData,
 		},
+		{
+			Name: "013_reset_plans_for_new_model",
+			Run:  resetPlans,
+		},
+		{
+			Name: "014_reset_plans_for_branch_addon",
+			Run:  resetPlans,
+		},
 	}
 }
 
@@ -217,4 +225,12 @@ func resetAllData(ctx context.Context, db *mongo.Database) error {
 		}
 	}
 	return nil
+}
+
+// resetPlans drops the plans collection so seedPlans re-seeds the current
+// lineup (Starter/Pro/Business, con Business ilimitado y add-on por sucursal;
+// sin Enterprise) después de que corren las migraciones. Seguro pre-lanzamiento:
+// no hay suscripciones que referencien planes.
+func resetPlans(ctx context.Context, db *mongo.Database) error {
+	return db.Collection("plans").Drop(ctx)
 }

@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	MongoURI             string
+	MongoDatabase        string
 	JWTSecret            string
 	Port                 string
 	GinMode              string
@@ -43,6 +44,7 @@ func Load() (*Config, error) {
 
 	return &Config{
 		MongoURI:           getEnv("MONGODB_URI", ""),
+		MongoDatabase:      getEnv("MONGODB_DATABASE", "tepidolacuenta"),
 		JWTSecret:          getEnv("JWT_SECRET", ""),
 		Port:               getEnv("PORT", "8080"),
 		GinMode:            getEnv("GIN_MODE", "debug"),
