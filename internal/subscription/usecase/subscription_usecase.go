@@ -26,6 +26,9 @@ type UseCase interface {
 	GetByRestaurantID(ctx context.Context, restaurantID primitive.ObjectID, userID primitive.ObjectID) (*domain.SubscriptionWithPlan, error)
 	Update(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID, input domain.UpdateSubscriptionInput) (*domain.Subscription, error)
 	Cancel(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) error
+
+	// EnsureComped garantiza que un user cortesía tenga suscripción activa (ver método).
+	EnsureComped(ctx context.Context, userID, restaurantID primitive.ObjectID) error
 }
 
 type subscriptionUseCase struct {
@@ -245,4 +248,50 @@ func (uc *subscriptionUseCase) Cancel(ctx context.Context, id primitive.ObjectID
 	subscription.Status = domain.SubscriptionStatusCanceled
 
 	return uc.subscriptionRepo.Update(ctx, subscription)
+}
+
+// EnsureComped garantiza que un usuario cortesía tenga una suscripción
+// perpetuamente activa en el plan Business para su restaurante, de modo que el
+// paywall (que vive sólo en el frontend) lo deje pasar sin pasar por selección
+// de plan ni pago. Es idempotente: si ya está activa/Business/holgada, no hace
+// nada. Está pensada para correr en cada login de un usuario marcado como
+// comped en la DB. Si no existe suscripción para el restaurante, crea una.
+func (uc *subscriptionUseCase) EnsureComped(ctx context.Context, userID, restaurantID primitive.ObjectID) error {
+	businessPlan, err := uc.findBusinessPlan(ctx)
+	if err != nil {
+		return err
+	}
+
+	sub, err := uc.subscriptionRepo.FindByRestaurantID(ctx, restaurantID)
+	if err != nil {
+		if !errors.Is(err, pkg.ErrNotFound) {
+			return err
+		}
+		// Sin suscripción previa: creamos una cortesía activa.
+		sub = domain.NewSubscription(userID, restaurantID, businessPlan.ID, domain.SubscriptionStatusActive)
+		sub.ApplyComped(businessPlan.ID)
+		return uc.subscriptionRepo.Create(ctx, sub)
+	}
+
+	if sub.IsCompedActive(businessPlan.ID) {
+		return nil
+	}
+
+	sub.ApplyComped(businessPlan.ID)
+	return uc.subscriptionRepo.Update(ctx, sub)
+}
+
+// findBusinessPlan devuelve el plan Business (el más alto), que es el que se le
+// asigna a las cuentas cortesía.
+func (uc *subscriptionUseCase) findBusinessPlan(ctx context.Context) (*domain.Plan, error) {
+	plans, err := uc.planRepo.FindAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range plans {
+		if p.Name == domain.PlanNameBusiness {
+			return p, nil
+		}
+	}
+	return nil, pkg.ErrNotFound
 }
