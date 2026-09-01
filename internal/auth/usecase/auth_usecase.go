@@ -42,7 +42,7 @@ type UseCase interface {
 // para desacoplar auth y evitar ciclos de import; lo satisface el subscription
 // usecase, que se inyecta desde main.
 type CompedSubscriptionProvisioner interface {
-	EnsureComped(ctx context.Context, userID, restaurantID primitive.ObjectID) error
+	EnsureComped(ctx context.Context, userID primitive.ObjectID) error
 }
 
 type authUseCase struct {
@@ -73,10 +73,10 @@ func NewAuthUseCase(repo repository.Repository, restaurantRepository restaurantR
 // provisionComped mantiene activa la suscripción de un usuario cortesía. Corre
 // después del login; los errores se loguean pero nunca bloquean el login.
 func (uc *authUseCase) provisionComped(ctx context.Context, user *domain.User) {
-	if !user.Comped || uc.compedProvisioner == nil || user.RestaurantID == nil {
+	if !user.Comped || uc.compedProvisioner == nil {
 		return
 	}
-	if err := uc.compedProvisioner.EnsureComped(ctx, user.ID, *user.RestaurantID); err != nil {
+	if err := uc.compedProvisioner.EnsureComped(ctx, user.ID); err != nil {
 		log.Printf("[Comped] error asegurando suscripción activa para %s: %v", user.Email, err)
 	}
 }
