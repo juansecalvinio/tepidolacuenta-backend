@@ -28,7 +28,7 @@ type UseCase interface {
 	Cancel(ctx context.Context, id primitive.ObjectID, userID primitive.ObjectID) error
 
 	// EnsureComped garantiza que un user cortesía tenga suscripción activa (ver método).
-	EnsureComped(ctx context.Context, userID, restaurantID primitive.ObjectID) error
+	EnsureComped(ctx context.Context, userID primitive.ObjectID) error
 }
 
 type subscriptionUseCase struct {
@@ -256,7 +256,20 @@ func (uc *subscriptionUseCase) Cancel(ctx context.Context, id primitive.ObjectID
 // de plan ni pago. Es idempotente: si ya está activa/Business/holgada, no hace
 // nada. Está pensada para correr en cada login de un usuario marcado como
 // comped en la DB. Si no existe suscripción para el restaurante, crea una.
-func (uc *subscriptionUseCase) EnsureComped(ctx context.Context, userID, restaurantID primitive.ObjectID) error {
+func (uc *subscriptionUseCase) EnsureComped(ctx context.Context, userID primitive.ObjectID) error {
+	// El restaurante del owner se linkea por restaurants.user_id (no vive en el
+	// documento del user), así que lo resolvemos por acá y no dependemos de que
+	// user.RestaurantID esté seteado —para owners no lo está—.
+	restaurants, err := uc.restaurantRepo.FindByUserID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if len(restaurants) == 0 {
+		// Todavía no creó su restaurante: no hay suscripción que activar.
+		return nil
+	}
+	restaurantID := restaurants[0].ID
+
 	businessPlan, err := uc.findBusinessPlan(ctx)
 	if err != nil {
 		return err
