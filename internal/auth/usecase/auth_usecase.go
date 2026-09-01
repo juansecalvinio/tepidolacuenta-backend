@@ -37,26 +37,47 @@ type UseCase interface {
 	RevokeEmployee(ctx context.Context, ownerUserID, restaurantID, employeeID primitive.ObjectID) error
 }
 
+// CompedSubscriptionProvisioner garantiza que un usuario cortesía tenga una
+// suscripción activa. Se define acá (y no se importa el usecase de subscription)
+// para desacoplar auth y evitar ciclos de import; lo satisface el subscription
+// usecase, que se inyecta desde main.
+type CompedSubscriptionProvisioner interface {
+	EnsureComped(ctx context.Context, userID primitive.ObjectID) error
+}
+
 type authUseCase struct {
-	repo            repository.Repository
-	restaurantRepo  restaurantRepo.Repository
-	jwtService      *pkg.JWTService
-	emailService    *pkg.EmailService
-	frontendBaseURL string
-	googleOAuth     *oauth2.Config
-	invitationUC    invitationUseCase.UseCase
+	repo              repository.Repository
+	restaurantRepo    restaurantRepo.Repository
+	jwtService        *pkg.JWTService
+	emailService      *pkg.EmailService
+	frontendBaseURL   string
+	googleOAuth       *oauth2.Config
+	invitationUC      invitationUseCase.UseCase
+	compedProvisioner CompedSubscriptionProvisioner
 }
 
 // NewAuthUseCase creates a new authentication use case
-func NewAuthUseCase(repo repository.Repository, restaurantRepository restaurantRepo.Repository, jwtService *pkg.JWTService, emailService *pkg.EmailService, frontendBaseURL string, googleOAuth *oauth2.Config, invitationUC invitationUseCase.UseCase) UseCase {
+func NewAuthUseCase(repo repository.Repository, restaurantRepository restaurantRepo.Repository, jwtService *pkg.JWTService, emailService *pkg.EmailService, frontendBaseURL string, googleOAuth *oauth2.Config, invitationUC invitationUseCase.UseCase, compedProvisioner CompedSubscriptionProvisioner) UseCase {
 	return &authUseCase{
-		repo:            repo,
-		restaurantRepo:  restaurantRepository,
-		jwtService:      jwtService,
-		emailService:    emailService,
-		frontendBaseURL: frontendBaseURL,
-		googleOAuth:     googleOAuth,
-		invitationUC:    invitationUC,
+		repo:              repo,
+		restaurantRepo:    restaurantRepository,
+		jwtService:        jwtService,
+		emailService:      emailService,
+		frontendBaseURL:   frontendBaseURL,
+		googleOAuth:       googleOAuth,
+		invitationUC:      invitationUC,
+		compedProvisioner: compedProvisioner,
+	}
+}
+
+// provisionComped mantiene activa la suscripción de un usuario cortesía. Corre
+// después del login; los errores se loguean pero nunca bloquean el login.
+func (uc *authUseCase) provisionComped(ctx context.Context, user *domain.User) {
+	if !user.Comped || uc.compedProvisioner == nil {
+		return
+	}
+	if err := uc.compedProvisioner.EnsureComped(ctx, user.ID); err != nil {
+		log.Printf("[Comped] error asegurando suscripción activa para %s: %v", user.Email, err)
 	}
 }
 
@@ -102,6 +123,8 @@ func (uc *authUseCase) Login(ctx context.Context, input domain.LoginInput) (*dom
 	if err := user.ComparePassword(input.Password); err != nil {
 		return nil, pkg.ErrInvalidCredentials
 	}
+
+	uc.provisionComped(ctx, user)
 
 	restaurantID := ""
 	if user.RestaurantID != nil {
@@ -227,7 +250,20 @@ func (uc *authUseCase) HandleGoogleCallback(ctx context.Context, code string) (*
 		return nil, err
 	}
 
-	jwtToken, err := uc.jwtService.GenerateToken(user.ID, user.Email, string(domain.RoleOwner), "", "")
+	uc.provisionComped(ctx, user)
+
+	// El token debe llevar el role y el restaurante reales del usuario (igual que
+	// Login): un owner ya vinculado a un restaurante los necesita en las claims
+	// para que el backend lo autorice y el frontend no lo mande a elegir plan.
+	restaurantID := ""
+	if user.RestaurantID != nil {
+		restaurantID = user.RestaurantID.Hex()
+	}
+	branchID := ""
+	if user.BranchID != nil {
+		branchID = user.BranchID.Hex()
+	}
+	jwtToken, err := uc.jwtService.GenerateToken(user.ID, user.Email, string(user.Role), restaurantID, branchID)
 	if err != nil {
 		return nil, err
 	}

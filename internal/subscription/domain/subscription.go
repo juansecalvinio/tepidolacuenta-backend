@@ -145,6 +145,29 @@ func (p *Plan) PriceForBranches(cycle string, branches int) float64 {
 	return p.Price + float64(extras)*p.ExtraBranchPrice
 }
 
+// CompedBranches es la cantidad de sucursales que se le asigna a una cuenta
+// cortesía. El chequeo de límite de sucursales rechaza valores <= 0, así que el
+// sentinel Unlimited (-1) no sirve acá; un número alto es "ilimitado" en la práctica.
+const CompedBranches = 999
+
+// ApplyComped deja la suscripción como una cuenta cortesía: activa, en el plan
+// indicado, con sucursales holgadas y sin trial. Es idempotente.
+func (s *Subscription) ApplyComped(planID primitive.ObjectID) {
+	s.Status = SubscriptionStatusActive
+	s.PlanID = planID
+	s.PurchasedBranches = CompedBranches
+	s.TrialStartedAt = nil
+	s.TrialEndsAt = nil
+}
+
+// IsCompedActive indica si la suscripción ya cumple el estado cortesía objetivo
+// para el plan dado, de modo de poder saltear la escritura (idempotencia).
+func (s *Subscription) IsCompedActive(planID primitive.ObjectID) bool {
+	return s.Status == SubscriptionStatusActive &&
+		s.PlanID == planID &&
+		s.PurchasedBranches >= CompedBranches
+}
+
 // SubscriptionWithPlan represents a subscription with its associated plan embedded
 type SubscriptionWithPlan struct {
 	ID                    primitive.ObjectID `json:"id"`

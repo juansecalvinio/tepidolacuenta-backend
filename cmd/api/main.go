@@ -145,9 +145,13 @@ func main() {
 	invitationRepository := invitationRepo.NewMongoRepository(db.Database)
 	invitationService := invitationUseCase.NewInvitationUseCase(invitationRepository, restaurantRepository, branchRepository)
 
+	// Initialize Subscription module (antes de Auth: éste lo usa para las cuentas cortesía)
+	subscriptionService := subscriptionUseCase.NewSubscriptionUseCase(planRepository, subscriptionRepository, restaurantRepository)
+	subscriptionHdlr := subscriptionHandler.NewSubscriptionHandler(subscriptionService)
+
 	// Initialize Auth module
 	authRepository := authRepo.NewMongoRepository(db.Database)
-	authService := authUseCase.NewAuthUseCase(authRepository, restaurantRepository, jwtService, emailService, cfg.FrontendBaseURL, googleOAuth, invitationService)
+	authService := authUseCase.NewAuthUseCase(authRepository, restaurantRepository, jwtService, emailService, cfg.FrontendBaseURL, googleOAuth, invitationService, subscriptionService)
 	authHdlr := authHandler.NewAuthHandler(authService, cfg.JWTSecret, cfg.FrontendBaseURL)
 
 	invitationHdlr := invitationHandler.NewInvitationHandler(invitationService, authService)
@@ -164,10 +168,6 @@ func main() {
 	// Initialize Setup module
 	setupService := setupUseCase.NewSetupUseCase(restaurantRepository, branchRepository, tableRepository, qrService)
 	setupHdlr := setupHandler.NewSetupHandler(setupService)
-
-	// Initialize Subscription module
-	subscriptionService := subscriptionUseCase.NewSubscriptionUseCase(planRepository, subscriptionRepository, restaurantRepository)
-	subscriptionHdlr := subscriptionHandler.NewSubscriptionHandler(subscriptionService)
 
 	// Initialize Payment module
 	mpClient, err := mpInfra.NewClient(cfg.MercadoPagoAccessToken, cfg.MercadoPagoWebhookSecret)

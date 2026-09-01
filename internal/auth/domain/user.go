@@ -20,6 +20,10 @@ type User struct {
 	Password            string              `json:"-" bson:"password,omitempty"`
 	GoogleID            string              `json:"-" bson:"google_id,omitempty"`
 	Role                Role                `json:"role" bson:"role"`
+	// Comped marca una cuenta cortesía: usa la app como owner normal pero sin
+	// pasar por selección de plan ni pago. Se setea a mano en la DB; al loguear,
+	// el backend garantiza que su suscripción quede activa (ver EnsureComped).
+	Comped              bool                `json:"comped,omitempty" bson:"comped,omitempty"`
 	RestaurantID        *primitive.ObjectID `json:"restaurantId,omitempty" bson:"restaurant_id,omitempty"`
 	BranchID            *primitive.ObjectID `json:"branchId,omitempty" bson:"branch_id,omitempty"`
 	ResetPasswordToken  string              `json:"-" bson:"reset_password_token,omitempty"`
