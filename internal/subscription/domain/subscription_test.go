@@ -1,6 +1,11 @@
 package domain
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
 
 func TestNewPlanSetsAllFields(t *testing.T) {
 	p := NewPlan(PlanNameStarter, 28500, 285000, 19, 0, 0, 25, 1, 1, 30, ReportsTierNone)
@@ -59,5 +64,57 @@ func TestPriceForBranchesNoAddon(t *testing.T) {
 	s := NewPlan(PlanNameStarter, 28500, 285000, 19, 0, 0, 25, 1, 1, 30, ReportsTierNone)
 	if got := s.PriceForBranches(BillingCycleMonthly, 5); got != 28500 {
 		t.Fatalf("starter 5 suc = %v, want 28500", got)
+	}
+}
+
+func TestApplyCompedSetsActiveBusinessAndClearsTrial(t *testing.T) {
+	businessID := primitive.NewObjectID()
+	now := time.Now()
+	// Suscripción vencida en trial: la cuenta cortesía debe recuperarla.
+	sub := &Subscription{
+		Status:            SubscriptionStatusExpired,
+		PlanID:            primitive.NewObjectID(),
+		PurchasedBranches: 1,
+		TrialStartedAt:    &now,
+		TrialEndsAt:       &now,
+	}
+
+	sub.ApplyComped(businessID)
+
+	if sub.Status != SubscriptionStatusActive {
+		t.Fatalf("status = %q, want active", sub.Status)
+	}
+	if sub.PlanID != businessID {
+		t.Fatalf("planID = %v, want %v", sub.PlanID, businessID)
+	}
+	if sub.PurchasedBranches != CompedBranches {
+		t.Fatalf("purchasedBranches = %d, want %d", sub.PurchasedBranches, CompedBranches)
+	}
+	if sub.TrialStartedAt != nil || sub.TrialEndsAt != nil {
+		t.Fatalf("trial no fue limpiado: started=%v ends=%v", sub.TrialStartedAt, sub.TrialEndsAt)
+	}
+	if CompedBranches <= 0 {
+		t.Fatalf("CompedBranches debe ser > 0 (el chequeo de límite rechaza <= 0)")
+	}
+}
+
+func TestIsCompedActiveIdempotency(t *testing.T) {
+	businessID := primitive.NewObjectID()
+
+	active := &Subscription{Status: SubscriptionStatusActive, PlanID: businessID, PurchasedBranches: CompedBranches}
+	if !active.IsCompedActive(businessID) {
+		t.Fatalf("una suscripción ya cortesía debería reportar IsCompedActive=true")
+	}
+
+	// Distinto plan, estado no-activo, o pocas sucursales => no está lista.
+	cases := []*Subscription{
+		{Status: SubscriptionStatusActive, PlanID: primitive.NewObjectID(), PurchasedBranches: CompedBranches},
+		{Status: SubscriptionStatusExpired, PlanID: businessID, PurchasedBranches: CompedBranches},
+		{Status: SubscriptionStatusActive, PlanID: businessID, PurchasedBranches: 1},
+	}
+	for i, c := range cases {
+		if c.IsCompedActive(businessID) {
+			t.Fatalf("caso %d: IsCompedActive debería ser false", i)
+		}
 	}
 }

@@ -160,6 +160,7 @@ func (r *mongoSubscriptionRepository) Update(ctx context.Context, subscription *
 			"trial_started_at":        subscription.TrialStartedAt,
 			"trial_ends_at":           subscription.TrialEndsAt,
 			"payment_subscription_id": subscription.PaymentSubscriptionID,
+			"purchased_branches":      subscription.PurchasedBranches,
 			"updated_at":              subscription.UpdatedAt,
 		},
 	}
